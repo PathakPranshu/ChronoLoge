@@ -12,11 +12,14 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_riverpod: ^3.4.3
+  flutter_secure_storage: ^11.2.0
   google_fonts: ^8.2.1
   image_picker: ^1.2.3
   local_auth: ^3.0.2
+  path: ^1.9.1
   path_provider: ^2.1.6
   shared_preferences: ^2.5.5
+  sqflite_sqlcipher: ^3.4.1
   table_calendar: ^3.2.1
 
 dev_dependencies:
