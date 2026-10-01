@@ -46,3 +46,13 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+
+# Environment Variables
+.env 
+/lib/core/env/env.g.dart
+
+# Firebase 
+.firebase/
+firebase_options.dart
+android/app/google-services.json
