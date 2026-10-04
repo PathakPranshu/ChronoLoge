@@ -8,6 +8,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/services/media_encryption_provider.dart';
+import '../../../core/widgets/encrypted_media_image.dart';
 import '../../settings/models/app_settings.dart';
 import '../../settings/viewmodels/settings_view_model.dart';
 import '../viewmodels/today_view_model.dart';
@@ -419,13 +421,6 @@ class _TodayContent extends StatelessWidget {
             ),
             _ContextPill(icon: Icons.cloud_outlined, label: today.weatherLabel),
           ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Weather data by Open-Meteo',
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: colors.onSurfaceVariant,
-          ),
         ),
         const SizedBox(height: 30),
         if (today.isAutomaticMode)
@@ -1011,20 +1006,8 @@ class _TimelineItemCard extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(14),
                                 child: SizedBox(
                                   width: 128,
-                                  child: Image.file(
-                                    File(item.imageLocations[index]),
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (
-                                          context,
-                                          error,
-                                          stackTrace,
-                                        ) => ColoredBox(
-                                          color: colors.surfaceContainerHighest,
-                                          child: const Icon(
-                                            Icons.broken_image_outlined,
-                                          ),
-                                        ),
+                                  child: EncryptedMediaImage(
+                                    filePath: item.imageLocations[index],
                                   ),
                                 ),
                               ),
@@ -1346,7 +1329,7 @@ class _SnippetDialogState extends State<_SnippetDialog> {
                         child: SizedBox(
                           width: 96,
                           height: 74,
-                          child: Image.file(File(filePath), fit: BoxFit.cover),
+                          child: EncryptedMediaImage(filePath: filePath),
                         ),
                       ),
                       Positioned(
@@ -1631,7 +1614,7 @@ class _MoodPickerState extends State<_MoodPicker> {
   }
 }
 
-class _VoiceMemoPlayer extends StatefulWidget {
+class _VoiceMemoPlayer extends ConsumerStatefulWidget {
   const _VoiceMemoPlayer({
     required this.audioLocation,
     required this.memoNumber,
@@ -1643,17 +1626,30 @@ class _VoiceMemoPlayer extends StatefulWidget {
   final VoidCallback? onDelete;
 
   @override
-  State<_VoiceMemoPlayer> createState() => _VoiceMemoPlayerState();
+  ConsumerState<_VoiceMemoPlayer> createState() => _VoiceMemoPlayerState();
 }
 
-class _VoiceMemoPlayerState extends State<_VoiceMemoPlayer> {
+class _VoiceMemoPlayerState extends ConsumerState<_VoiceMemoPlayer> {
   final AudioPlayer _player = AudioPlayer();
   bool _isLoaded = false;
+  String? _playbackPath;
 
   @override
   void dispose() {
-    unawaited(_player.dispose());
+    unawaited(_disposePlayback());
     super.dispose();
+  }
+
+  Future<void> _disposePlayback() async {
+    await _player.dispose();
+    final playbackPath = _playbackPath;
+    if (playbackPath == null) return;
+    try {
+      final file = File(playbackPath);
+      if (await file.exists()) await file.delete();
+    } on FileSystemException {
+      // Temporary playback files are also cleared by the operating system.
+    }
   }
 
   @override
@@ -1746,7 +1742,10 @@ class _VoiceMemoPlayerState extends State<_VoiceMemoPlayer> {
   Future<void> _togglePlayback() async {
     try {
       if (!_isLoaded) {
-        await _player.setFilePath(widget.audioLocation);
+        _playbackPath = await ref
+            .read(mediaEncryptionServiceProvider)
+            .createPlaybackCopy(widget.audioLocation);
+        await _player.setFilePath(_playbackPath!);
         _isLoaded = true;
       }
       if (_player.processingState == ProcessingState.completed) {
@@ -1790,18 +1789,7 @@ class _DiaryImage extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(22),
-            child: Image.file(
-              File(imageLocation),
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => ColoredBox(
-                color: colors.surfaceContainerHighest,
-                child: Icon(
-                  Icons.broken_image_outlined,
-                  color: colors.onSurfaceVariant,
-                  size: 36,
-                ),
-              ),
-            ),
+            child: EncryptedMediaImage(filePath: imageLocation),
           ),
           Positioned(
             top: 8,

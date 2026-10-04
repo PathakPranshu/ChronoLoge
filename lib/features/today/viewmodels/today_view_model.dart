@@ -8,6 +8,9 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../core/database/database_providers.dart';
 import '../../../core/database/diary_database.dart';
+import '../../../core/database/settings_database.dart';
+import '../../../core/services/media_encryption_provider.dart';
+import '../../../core/services/media_encryption_service.dart';
 import '../../../core/services/weather_location_service.dart';
 import '../../settings/models/app_settings.dart';
 import '../../settings/viewmodels/settings_view_model.dart';
@@ -115,12 +118,16 @@ class TodayState {
 
 class TodayViewModel extends AsyncNotifier<TodayState> {
   static const _diaryModeSetting = 'diary_mode';
+  static const _mediaEncryptionMigrationSetting =
+      'media_encryption_migrated_v1';
 
   final ImagePicker _imagePicker = ImagePicker();
   final WeatherLocationService _weatherLocationService =
       const WeatherLocationService();
 
   DiaryDatabase get _database => ref.read(diaryDatabaseProvider);
+  MediaEncryptionService get _mediaEncryption =>
+      ref.read(mediaEncryptionServiceProvider);
 
   @override
   Future<TodayState> build() async {
@@ -134,6 +141,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
       ),
     );
     await _recoverLostImages(dateKey);
+    await _encryptLegacyMedia(settingsDatabase);
     final todayState = await _loadToday(dateKey, today);
     final storedMode = await settingsDatabase.getSetting(_diaryModeSetting);
     unawaited(_loadWeatherAfterBuild(dateKey, temperatureUnit));
@@ -195,6 +203,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
     var savedToDatabase = false;
     try {
       storedImages.addAll(await _copySnippetImages(current.dateKey, images));
+      await _mediaEncryption.encryptFiles(voiceMemoLocations);
       await _database.addTimelineItem(
         current.dateKey,
         occurredAt: occurredAt,
@@ -238,6 +247,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
     var savedToDatabase = false;
     try {
       copiedImages.addAll(await _copySnippetImages(current.dateKey, newImages));
+      await _mediaEncryption.encryptFiles(newVoiceMemoLocations);
       final finalImages = [...retainedImageLocations, ...copiedImages];
       final finalVoiceMemos = [
         ...retainedVoiceMemoLocations,
@@ -345,6 +355,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
   Future<void> addVoiceMemo(String audioLocation) async {
     final current = state.requireValue;
     try {
+      await _mediaEncryption.encryptFile(audioLocation);
       await _database.addVoiceMemo(current.dateKey, audioLocation);
     } catch (_) {
       await _deleteFileIfPresent(audioLocation);
@@ -354,6 +365,26 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
   }
 
   void refresh() => ref.invalidateSelf();
+
+  Future<void> _encryptLegacyMedia(SettingsDatabase settingsDatabase) async {
+    if (await settingsDatabase.getSetting(_mediaEncryptionMigrationSetting) ==
+        'true') {
+      return;
+    }
+    await _mediaEncryption.encryptFiles(await _database.getAllMediaLocations());
+    if (await settingsDatabase.getSetting(_mediaEncryptionMigrationSetting) ==
+        null) {
+      await settingsDatabase.addSetting(
+        _mediaEncryptionMigrationSetting,
+        'true',
+      );
+    } else {
+      await settingsDatabase.changeSetting(
+        _mediaEncryptionMigrationSetting,
+        'true',
+      );
+    }
+  }
 
   Future<void> _reloadEntry(String dateKey) async {
     final current = state.requireValue;
@@ -379,6 +410,15 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
     final voiceMemos = (entry?['voice_memos_loc'] as List<Object?>? ?? const [])
         .whereType<String>()
         .toList(growable: false);
+    final timelineMedia = timelineRows.expand<String>((row) sync* {
+      yield* (row['image_locations'] as List<Object?>).whereType<String>();
+      yield* (row['voice_memo_locations'] as List<Object?>).whereType<String>();
+    });
+    await _mediaEncryption.encryptFiles([
+      ...images,
+      ...voiceMemos,
+      ...timelineMedia,
+    ]);
 
     return TodayState(
       dateKey: dateKey,
@@ -468,6 +508,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
 
       try {
         await image.saveTo(destination);
+        await _mediaEncryption.encryptFile(destination);
         await _database.addImage(dateKey, destination);
       } catch (_) {
         final copiedFile = File(destination);
@@ -498,8 +539,14 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
         imageDirectory.path,
         '${DateTime.now().microsecondsSinceEpoch}_$index$safeExtension',
       );
-      await image.saveTo(destination);
-      storedLocations.add(destination);
+      try {
+        await image.saveTo(destination);
+        await _mediaEncryption.encryptFile(destination);
+        storedLocations.add(destination);
+      } catch (_) {
+        await _deleteFileIfPresent(destination);
+        rethrow;
+      }
     }
     return storedLocations;
   }

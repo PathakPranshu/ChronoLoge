@@ -7,6 +7,8 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/database/database_providers.dart';
+import '../../../core/services/media_encryption_provider.dart';
+import '../../../core/services/media_encryption_service.dart';
 
 final diaryEntryViewModelProvider = AsyncNotifierProvider.autoDispose
     .family<DiaryEntryViewModel, DiaryEntryState, String>(
@@ -71,6 +73,9 @@ class DiaryEntryViewModel extends AsyncNotifier<DiaryEntryState> {
   final List<String> _pendingImages = [];
   final List<String> _pendingVoiceMemos = [];
 
+  MediaEncryptionService get _mediaEncryption =>
+      ref.read(mediaEncryptionServiceProvider);
+
   @override
   Future<DiaryEntryState> build() async {
     ref.onDispose(() => unawaited(_discardPendingMedia()));
@@ -78,6 +83,17 @@ class DiaryEntryViewModel extends AsyncNotifier<DiaryEntryState> {
         .watch(diaryDatabaseProvider)
         .getEntry(dateKey, readOnly: true);
     final date = DateTime.parse(dateKey);
+    final imageLocations = (entry?['images_loc'] as List<Object?>? ?? const [])
+        .whereType<String>()
+        .toList(growable: false);
+    final voiceMemoLocations =
+        (entry?['voice_memos_loc'] as List<Object?>? ?? const [])
+            .whereType<String>()
+            .toList(growable: false);
+    await _mediaEncryption.encryptFiles([
+      ...imageLocations,
+      ...voiceMemoLocations,
+    ]);
 
     return DiaryEntryState(
       dateKey: dateKey,
@@ -85,13 +101,8 @@ class DiaryEntryViewModel extends AsyncNotifier<DiaryEntryState> {
       title: entry?['title'] as String? ?? '',
       text: entry?['text_data'] as String? ?? '',
       mood: entry?['mood'] as String? ?? '',
-      imageLocations: (entry?['images_loc'] as List<Object?>? ?? const [])
-          .whereType<String>()
-          .toList(growable: false),
-      voiceMemoLocations:
-          (entry?['voice_memos_loc'] as List<Object?>? ?? const [])
-              .whereType<String>()
-              .toList(growable: false),
+      imageLocations: imageLocations,
+      voiceMemoLocations: voiceMemoLocations,
       exists: entry != null,
     );
   }
@@ -125,8 +136,15 @@ class DiaryEntryViewModel extends AsyncNotifier<DiaryEntryState> {
           '${DateTime.now().microsecondsSinceEpoch}_$index'
           '${extension.isEmpty ? '.jpg' : extension}',
         );
-        await image.saveTo(destination);
-        _pendingImages.add(destination);
+        try {
+          await image.saveTo(destination);
+          await _mediaEncryption.encryptFile(destination);
+          _pendingImages.add(destination);
+        } catch (_) {
+          final copiedFile = File(destination);
+          if (await copiedFile.exists()) await copiedFile.delete();
+          rethrow;
+        }
       }
     } finally {
       final latest = state.requireValue;
@@ -142,7 +160,14 @@ class DiaryEntryViewModel extends AsyncNotifier<DiaryEntryState> {
     }
   }
 
-  void addVoiceMemoDraft(String audioLocation) {
+  Future<void> addVoiceMemoDraft(String audioLocation) async {
+    try {
+      await _mediaEncryption.encryptFile(audioLocation);
+    } catch (_) {
+      final file = File(audioLocation);
+      if (await file.exists()) await file.delete();
+      rethrow;
+    }
     _pendingVoiceMemos.add(audioLocation);
     final current = state.requireValue;
     state = AsyncData(

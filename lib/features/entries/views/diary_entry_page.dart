@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../../../core/services/media_encryption_provider.dart';
+import '../../../core/widgets/encrypted_media_image.dart';
 import '../../today/views/voice_memo_dialog.dart';
 import '../viewmodels/diary_entry_view_model.dart';
 
@@ -184,7 +186,7 @@ class _DiaryEntryPageState extends ConsumerState<DiaryEntryPage> {
             dateKey: entry.dateKey,
           );
           if (memoPath != null && mounted) {
-            ref
+            await ref
                 .read(diaryEntryViewModelProvider(_dateKey).notifier)
                 .addVoiceMemoDraft(memoPath);
           }
@@ -315,13 +317,8 @@ class _EntryEditor extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 child: SizedBox(
                   width: 250,
-                  child: Image.file(
-                    File(entry.imageLocations[index]),
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => ColoredBox(
-                      color: colors.surfaceContainerHighest,
-                      child: const Icon(Icons.broken_image_outlined),
-                    ),
+                  child: EncryptedMediaImage(
+                    filePath: entry.imageLocations[index],
                   ),
                 ),
               ),
@@ -419,7 +416,7 @@ class _EntryMoodPickerState extends State<_EntryMoodPicker> {
   }
 }
 
-class _EntryVoiceMemo extends StatefulWidget {
+class _EntryVoiceMemo extends ConsumerStatefulWidget {
   const _EntryVoiceMemo({
     required this.audioLocation,
     required this.memoNumber,
@@ -429,17 +426,30 @@ class _EntryVoiceMemo extends StatefulWidget {
   final int memoNumber;
 
   @override
-  State<_EntryVoiceMemo> createState() => _EntryVoiceMemoState();
+  ConsumerState<_EntryVoiceMemo> createState() => _EntryVoiceMemoState();
 }
 
-class _EntryVoiceMemoState extends State<_EntryVoiceMemo> {
+class _EntryVoiceMemoState extends ConsumerState<_EntryVoiceMemo> {
   final AudioPlayer _player = AudioPlayer();
   bool _isLoaded = false;
+  String? _playbackPath;
 
   @override
   void dispose() {
-    unawaited(_player.dispose());
+    unawaited(_disposePlayback());
     super.dispose();
+  }
+
+  Future<void> _disposePlayback() async {
+    await _player.dispose();
+    final playbackPath = _playbackPath;
+    if (playbackPath == null) return;
+    try {
+      final file = File(playbackPath);
+      if (await file.exists()) await file.delete();
+    } on FileSystemException {
+      // Temporary playback files are also cleared by the operating system.
+    }
   }
 
   @override
@@ -467,7 +477,10 @@ class _EntryVoiceMemoState extends State<_EntryVoiceMemo> {
 
   Future<void> _togglePlayback() async {
     if (!_isLoaded) {
-      await _player.setFilePath(widget.audioLocation);
+      _playbackPath = await ref
+          .read(mediaEncryptionServiceProvider)
+          .createPlaybackCopy(widget.audioLocation);
+      await _player.setFilePath(_playbackPath!);
       _isLoaded = true;
     }
     if (_player.processingState == ProcessingState.completed) {

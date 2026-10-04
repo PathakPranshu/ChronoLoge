@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/background_location_service.dart';
+import '../../authentication/viewmodels/authentication_view_model.dart';
 import '../../authentication/views/authentication_page.dart';
 import '../../tracking/viewmodels/background_tracking_controller.dart';
 import '../models/app_settings.dart';
@@ -41,6 +42,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsViewModelProvider);
+    final signedInUser = ref.watch(authenticatedUserProvider).value;
     final trackingStatus =
         ref.watch(backgroundTrackingControllerProvider).value ??
         BackgroundTrackingStatus.starting;
@@ -65,8 +67,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             Card(
               child: ListTile(
                 leading: const Icon(Icons.account_circle_outlined),
-                title: const Text('Sign in'),
-                subtitle: const Text('Sync and back up your diary'),
+                title: Text(
+                  signedInUser == null
+                      ? 'Sign in'
+                      : signedInUser.displayName?.trim().isNotEmpty == true
+                      ? signedInUser.displayName!
+                      : 'Account',
+                ),
+                subtitle: Text(
+                  signedInUser?.email ?? 'Sync and back up your diary',
+                ),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: _openAuthentication,
               ),

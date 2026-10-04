@@ -298,6 +298,31 @@ class DiaryDatabase {
     return _attachMedia(database, rows);
   }
 
+  // Returns every persisted image and voice-memo path for encryption migration.
+  Future<List<String>> getAllMediaLocations() async {
+    final database = await _appDatabase.database;
+    final mediaRows = await database.query(
+      DiaryMediaTable.name,
+      columns: [DiaryMediaTable.mediaLocation],
+    );
+    final timelineRows = await database.query(
+      DiaryTimelineItemsTable.name,
+      columns: [
+        DiaryTimelineItemsTable.imageLocations,
+        DiaryTimelineItemsTable.voiceMemoLocations,
+      ],
+    );
+    return <String>{
+      ...mediaRows
+          .map((row) => row[DiaryMediaTable.mediaLocation])
+          .whereType<String>(),
+      for (final row in timelineRows)
+        ..._decodeLocations(row[DiaryTimelineItemsTable.imageLocations]),
+      for (final row in timelineRows)
+        ..._decodeLocations(row[DiaryTimelineItemsTable.voiceMemoLocations]),
+    }.toList(growable: false);
+  }
+
   // Searches manual and automatic diary content using a case-insensitive match.
   Future<List<DiaryEntryMap>> searchDiary(String text) async {
     final searchText = text.trim();
