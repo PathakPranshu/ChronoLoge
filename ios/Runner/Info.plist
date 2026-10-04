@@ -26,6 +26,18 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ChronoLoge lets you add photos to your diary entries.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>ChronoLoge uses your location to add local context and weather to your day.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>ChronoLoge uses background location to privately build your automatic diary, recognize visits, and add local weather.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ChronoLoge uses the microphone when you record a voice memo.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

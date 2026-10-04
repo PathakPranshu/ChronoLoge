@@ -11,13 +11,19 @@ dependencies:
   firebase_core: ^4.15.0
   flutter:
     sdk: flutter
+  flutter_map: ^8.3.2
   flutter_riverpod: ^3.4.3
   flutter_secure_storage: ^11.2.0
-  google_fonts: ^8.2.1
+  geocoding: ^5.0.0
+  geolocator: ^14.1.1
+  http: ^1.6.0
   image_picker: ^1.2.3
+  just_audio: ^0.10.6
+  latlong2: ^0.10.1
   local_auth: ^3.0.2
   path: ^1.9.1
   path_provider: ^2.1.6
+  record: ^7.1.1
   shared_preferences: ^2.5.5
   sqflite_sqlcipher: ^3.4.1
   table_calendar: ^3.2.1
@@ -31,7 +37,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  fonts:
-    - family: Fraunces
-      fonts:
-        - asset: assets/fonts/fraunces_variable.ttf
