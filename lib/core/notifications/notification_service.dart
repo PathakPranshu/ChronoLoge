@@ -1,43 +1,16 @@
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+
+import 'notification_function.dart';
 
 class NotificationService {
   NotificationService._();
 
   static final NotificationService instance = NotificationService._();
 
-  final FlutterLocalNotificationsPlugin _plugin =
-      FlutterLocalNotificationsPlugin();
-
   static const int _dailyNotificationId = 100;
-  static const int _weeklyNotificationId = 200;
-  static const int _monthlyNotificationId = 300;
-  static const int _yearlyNotificationId = 400;
-
-  static const String locationPrompt =
-      'New Location Visited Add a Photo?';
-
-  static const AndroidNotificationChannel _channel =
-      AndroidNotificationChannel(
-    'chronologe_reminders',
-    'ChronoLoge Reminders',
-    description: 'Diary reminders and reflection prompts.',
-    importance: Importance.defaultImportance,
-  );
-
-  static const NotificationDetails _notificationDetails =
-      NotificationDetails(
-    android: AndroidNotificationDetails(
-      'chronologe_reminders',
-      'ChronoLoge Reminders',
-      channelDescription: 'Diary reminders and reflection prompts.',
-      importance: Importance.defaultImportance,
-      priority: Priority.defaultPriority,
-    ),
-    iOS: DarwinNotificationDetails(),
-  );
 
   Future<void> initialize() async {
     tz.initializeTimeZones();
@@ -59,23 +32,27 @@ class NotificationService {
       iOS: darwinSettings,
     );
 
-    await _plugin.initialize(initializationSettings);
+    await NotificationFunction.plugin.initialize(
+      initializationSettings,
+    );
 
-    await _plugin
+    await NotificationFunction.plugin
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_channel);
+        ?.createNotificationChannel(
+          NotificationFunction.channel,
+        );
 
     await _requestPermissions();
   }
 
   Future<void> _requestPermissions() async {
-    await _plugin
+    await NotificationFunction.plugin
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
 
-    await _plugin
+    await NotificationFunction.plugin
         .resolvePlatformSpecificImplementation<
             IOSFlutterLocalNotificationsPlugin>()
         ?.requestPermissions(
@@ -85,156 +62,55 @@ class NotificationService {
         );
   }
 
-  Future<void> scheduleAllNotifications() async {
-    await cancelAllNotifications();
+  Future<void> scheduleDailyPrompt({
+    int? hour,
+    int? minute,
+  }) async {
+    await NotificationFunction.plugin.cancel(
+      _dailyNotificationId,
+    );
 
-    await _scheduleDailyNotification();
-    await _scheduleWeeklyNotification();
-    await _scheduleMonthlyNotification();
-    await _scheduleYearlyNotification();
-  }
-
-  Future<void> _scheduleDailyNotification() async {
     final now = tz.TZDateTime.now(tz.local);
+
+    final notificationHour = hour ?? 20;
+    final notificationMinute = minute ?? 0;
 
     var scheduledDate = tz.TZDateTime(
       tz.local,
       now.year,
       now.month,
       now.day,
-      10,
-      30,
+      notificationHour,
+      notificationMinute,
     );
 
     if (!scheduledDate.isAfter(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
+      scheduledDate = scheduledDate.add(
+        const Duration(days: 1),
+      );
     }
 
-    await _plugin.zonedSchedule(
+    await NotificationFunction.plugin.zonedSchedule(
       _dailyNotificationId,
       'Your Diary Is Ready',
-      'Want to Add Finishing Touches?',
+      'Want to add finishing touches to today\'s entry?',
       scheduledDate,
-      _notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
+      NotificationFunction.notificationDetails,
+      androidScheduleMode:
+          AndroidScheduleMode.inexactAllowWhileIdle,
+      matchDateTimeComponents:
+          DateTimeComponents.time,
     );
   }
 
-  Future<void> _scheduleWeeklyNotification() async {
-    final now = tz.TZDateTime.now(tz.local);
-
-    var scheduledDate = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day,
-      18,
-      0,
+  Future<void> cancelDailyPrompt() async {
+    await NotificationFunction.plugin.cancel(
+      _dailyNotificationId,
     );
-
-    while (scheduledDate.weekday != DateTime.sunday ||
-        !scheduledDate.isAfter(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
-    }
-
-    await _plugin.zonedSchedule(
-      _weeklyNotificationId,
-      'Your Weekly Summary Is Here',
-      null,
-      scheduledDate,
-      _notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
-    );
-  }
-
-  Future<void> _scheduleMonthlyNotification() async {
-    final now = tz.TZDateTime.now(tz.local);
-
-    var year = now.year;
-    var month = now.month;
-
-    var scheduledDate = tz.TZDateTime(
-      tz.local,
-      year,
-      month,
-      1,
-      10,
-      0,
-    );
-
-    if (!scheduledDate.isAfter(now)) {
-      if (month == 12) {
-        year++;
-        month = 1;
-      } else {
-        month++;
-      }
-
-      scheduledDate = tz.TZDateTime(
-        tz.local,
-        year,
-        month,
-        1,
-        10,
-        0,
-      );
-    }
-
-    await _plugin.zonedSchedule(
-      _monthlyNotificationId,
-      'Look Back on How Your Month Went',
-      null,
-      scheduledDate,
-      _notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.dayOfMonthAndTime,
-    );
-  }
-
-  Future<void> _scheduleYearlyNotification() async {
-    final now = tz.TZDateTime.now(tz.local);
-
-    var year = now.year + 1;
-
-    var scheduledDate = tz.TZDateTime(
-      tz.local,
-      year,
-      1,
-      1,
-      10,
-      0,
-    );
-
-    if (!scheduledDate.isAfter(now)) {
-      year++;
-      scheduledDate = tz.TZDateTime(
-        tz.local,
-        year,
-        1,
-        1,
-        10,
-        0,
-      );
-    }
-
-    await _plugin.zonedSchedule(
-      _yearlyNotificationId,
-      'Look Back on Your Year',
-      null,
-      scheduledDate,
-      _notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-    );
-  }
-
-  Future<void> cancelAllNotifications() async {
-    await _plugin.cancelAll();
   }
 
   Future<List<PendingNotificationRequest>>
       getPendingNotifications() async {
-    return _plugin.pendingNotificationRequests();
+    return NotificationFunction.plugin.pendingNotificationRequests();
   }
 }

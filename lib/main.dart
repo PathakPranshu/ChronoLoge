@@ -6,7 +6,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await NotificationService.instance.initialize();
-  await NotificationService.instance.scheduleAllNotifications();
+  await NotificationService.instance.scheduleDailyPrompt();
 
   runApp(const MainApp());
 }
