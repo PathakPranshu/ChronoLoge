@@ -27,11 +27,20 @@ class NotificationFunction {
   );
 
   static Future<void> pushNotification(String content) async {
-    await plugin.show(
-      1000,
-      'ChronoLoge',
-      content,
-      notificationDetails,
-    );
-  }
+  await plugin.show(
+    1000,
+    'ChronoLoge',
+    content,
+    notificationDetails,
+  );
+}
+
+static Future<void> pushLocationPrompt() async {
+  await plugin.show(
+    1001,
+    'New Location Visited',
+    'Add a photo?',
+    notificationDetails,
+  );
+}
 }
