@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'features/authentication/ui/login/login_screen.dart';
 
 import 'core/notifications/notification_service.dart';
+import 'firebase_options.dart';
+import 'notification_demo.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
