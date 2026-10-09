@@ -9,12 +9,14 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/services/media_encryption_provider.dart';
 import '../../../core/services/media_encryption_service.dart';
+import '../../../core/utils/display_helpers.dart';
 
 final diaryEntryViewModelProvider = AsyncNotifierProvider.autoDispose
     .family<DiaryEntryViewModel, DiaryEntryState, String>(
       DiaryEntryViewModel.new,
     );
 
+/// Everything needed to draw the editable Summary tab for one date.
 class DiaryEntryState {
   const DiaryEntryState({
     required this.dateKey,
@@ -65,6 +67,7 @@ class DiaryEntryState {
   }
 }
 
+/// Loads and saves one manual diary summary and its encrypted media.
 class DiaryEntryViewModel extends AsyncNotifier<DiaryEntryState> {
   DiaryEntryViewModel(this.dateKey);
 
@@ -97,7 +100,7 @@ class DiaryEntryViewModel extends AsyncNotifier<DiaryEntryState> {
 
     return DiaryEntryState(
       dateKey: dateKey,
-      dateLabel: _formatDate(date),
+      dateLabel: formatFriendlyDate(date),
       title: entry?['title'] as String? ?? '',
       text: entry?['text_data'] as String? ?? '',
       mood: entry?['mood'] as String? ?? '',
@@ -226,34 +229,5 @@ class DiaryEntryViewModel extends AsyncNotifier<DiaryEntryState> {
         // A stale draft file is harmless and can be cleaned up later.
       }
     }
-  }
-
-  String _formatDate(DateTime date) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return '${date.day}${_ordinalSuffix(date.day)} '
-        '${months[date.month - 1]} ${date.year}';
-  }
-
-  String _ordinalSuffix(int day) {
-    if (day >= 11 && day <= 13) return 'th';
-    return switch (day % 10) {
-      1 => 'st',
-      2 => 'nd',
-      3 => 'rd',
-      _ => 'th',
-    };
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// Creates the light and dark Material themes from the selected accent color.
 abstract final class AppTheme {
   static ThemeData light(Color accentColor) {
     return _build(accentColor, Brightness.light);

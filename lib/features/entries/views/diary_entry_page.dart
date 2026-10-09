@@ -1,63 +1,34 @@
-import 'dart:async';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart';
 
-import '../../../core/services/media_encryption_provider.dart';
+import '../../../core/utils/display_helpers.dart';
 import '../../../core/widgets/encrypted_media_image.dart';
+import '../../../core/widgets/mood_picker.dart';
+import '../../../core/widgets/voice_memo_player.dart';
 import '../../today/views/voice_memo_dialog.dart';
 import '../viewmodels/diary_entry_view_model.dart';
 
+/// Edits the manual summary for one date.
+///
+/// It can be shown alone for an empty date or embedded in DiaryViewPage.
 class DiaryEntryPage extends ConsumerStatefulWidget {
-  const DiaryEntryPage({required this.date, super.key});
+  const DiaryEntryPage({required this.date, this.embedded = false, super.key});
 
   final DateTime date;
+  final bool embedded;
 
   @override
   ConsumerState<DiaryEntryPage> createState() => _DiaryEntryPageState();
 }
 
 class _DiaryEntryPageState extends ConsumerState<DiaryEntryPage> {
-  static const _months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
-
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _textController = TextEditingController();
   bool _initializedControllers = false;
 
-  String get _dateKey {
-    final year = widget.date.year.toString().padLeft(4, '0');
-    final month = widget.date.month.toString().padLeft(2, '0');
-    final day = widget.date.day.toString().padLeft(2, '0');
-    return '$year-$month-$day';
-  }
+  String get _dateKey => formatDateKey(widget.date);
 
-  String get _dateLabel {
-    final day = widget.date.day;
-    final suffix = day >= 11 && day <= 13
-        ? 'th'
-        : switch (day % 10) {
-            1 => 'st',
-            2 => 'nd',
-            3 => 'rd',
-            _ => 'th',
-          };
-    return '$day$suffix ${_months[widget.date.month - 1]} ${widget.date.year}';
-  }
+  String get _dateLabel => formatFriendlyDate(widget.date);
 
   @override
   void dispose() {
@@ -72,13 +43,15 @@ class _DiaryEntryPageState extends ConsumerState<DiaryEntryPage> {
     final entryValue = entry.value;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          entryValue?.dateLabel ?? _dateLabel,
-          style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(fontWeight: FontWeight.normal),
-        ),
-      ),
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              title: Text(
+                entryValue?.dateLabel ?? _dateLabel,
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.normal),
+              ),
+            ),
       body: SafeArea(
         top: false,
         child: entry.when(
@@ -280,10 +253,7 @@ class _EntryEditor extends StatelessWidget {
                 ),
               ),
             ),
-            _EntryMoodPicker(
-              selectedMood: entry.mood,
-              onSelected: onMoodSelected,
-            ),
+            MoodPicker(selectedMood: entry.mood, onSelected: onMoodSelected),
           ],
         ),
         if (entry.voiceMemoLocations.isNotEmpty) ...[
@@ -295,7 +265,7 @@ class _EntryEditor extends StatelessWidget {
             index < entry.voiceMemoLocations.length;
             index++
           ) ...[
-            _EntryVoiceMemo(
+            VoiceMemoPlayer(
               audioLocation: entry.voiceMemoLocations[index],
               memoNumber: index + 1,
             ),
@@ -327,170 +297,6 @@ class _EntryEditor extends StatelessWidget {
         ],
       ],
     );
-  }
-}
-
-class _EntryMoodPicker extends StatefulWidget {
-  const _EntryMoodPicker({
-    required this.selectedMood,
-    required this.onSelected,
-  });
-
-  final String selectedMood;
-  final ValueChanged<String> onSelected;
-
-  @override
-  State<_EntryMoodPicker> createState() => _EntryMoodPickerState();
-}
-
-class _EntryMoodPickerState extends State<_EntryMoodPicker> {
-  static const _moods = [
-    ('Great', '😄'),
-    ('Happy', '😊'),
-    ('Calm', '😌'),
-    ('Tired', '😴'),
-    ('Sad', '😔'),
-    ('Stressed', '😣'),
-  ];
-
-  final MenuController _menuController = MenuController();
-
-  @override
-  Widget build(BuildContext context) {
-    final selectedEmoji = _moods
-        .where((mood) => mood.$1 == widget.selectedMood)
-        .map((mood) => mood.$2)
-        .firstOrNull;
-    final colors = Theme.of(context).colorScheme;
-
-    return MenuAnchor(
-      controller: _menuController,
-      alignmentOffset: const Offset(-144, 6),
-      menuChildren: [
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: SizedBox(
-            width: 168,
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final mood in _moods)
-                  Tooltip(
-                    message: mood.$1,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () {
-                        widget.onSelected(mood.$1);
-                        _menuController.close();
-                      },
-                      child: Container(
-                        width: 48,
-                        height: 44,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: widget.selectedMood == mood.$1
-                              ? colors.secondaryContainer
-                              : null,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          mood.$2,
-                          style: const TextStyle(fontSize: 24),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ],
-      builder: (context, controller, child) => IconButton.filledTonal(
-        tooltip: 'Choose mood',
-        onPressed: () =>
-            controller.isOpen ? controller.close() : controller.open(),
-        icon: Text(selectedEmoji ?? '🙂', style: const TextStyle(fontSize: 22)),
-      ),
-    );
-  }
-}
-
-class _EntryVoiceMemo extends ConsumerStatefulWidget {
-  const _EntryVoiceMemo({
-    required this.audioLocation,
-    required this.memoNumber,
-  });
-
-  final String audioLocation;
-  final int memoNumber;
-
-  @override
-  ConsumerState<_EntryVoiceMemo> createState() => _EntryVoiceMemoState();
-}
-
-class _EntryVoiceMemoState extends ConsumerState<_EntryVoiceMemo> {
-  final AudioPlayer _player = AudioPlayer();
-  bool _isLoaded = false;
-  String? _playbackPath;
-
-  @override
-  void dispose() {
-    unawaited(_disposePlayback());
-    super.dispose();
-  }
-
-  Future<void> _disposePlayback() async {
-    await _player.dispose();
-    final playbackPath = _playbackPath;
-    if (playbackPath == null) return;
-    try {
-      final file = File(playbackPath);
-      if (await file.exists()) await file.delete();
-    } on FileSystemException {
-      // Temporary playback files are also cleared by the operating system.
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: StreamBuilder<PlayerState>(
-        stream: _player.playerStateStream,
-        builder: (context, snapshot) {
-          final isPlaying = snapshot.data?.playing ?? false;
-          return ListTile(
-            leading: IconButton.filledTonal(
-              tooltip: isPlaying ? 'Pause' : 'Play',
-              onPressed: _togglePlayback,
-              icon: Icon(
-                isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-              ),
-            ),
-            title: Text('Voice memo ${widget.memoNumber}'),
-          );
-        },
-      ),
-    );
-  }
-
-  Future<void> _togglePlayback() async {
-    if (!_isLoaded) {
-      _playbackPath = await ref
-          .read(mediaEncryptionServiceProvider)
-          .createPlaybackCopy(widget.audioLocation);
-      await _player.setFilePath(_playbackPath!);
-      _isLoaded = true;
-    }
-    if (_player.processingState == ProcessingState.completed) {
-      await _player.seek(Duration.zero);
-    }
-    if (_player.playing) {
-      await _player.pause();
-    } else {
-      unawaited(_player.play());
-    }
   }
 }
 

@@ -6,6 +6,7 @@ import '../../tracking/viewmodels/background_tracking_controller.dart';
 import '../viewmodels/authentication_view_model.dart';
 import 'authentication_page.dart';
 
+/// Shows sign-in when logged out and the real app when logged in.
 class AuthenticationGate extends ConsumerWidget {
   const AuthenticationGate({super.key});
 

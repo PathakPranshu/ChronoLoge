@@ -6,6 +6,7 @@ import '../../../core/database/diary_database.dart';
 final entriesViewModelProvider =
     AsyncNotifierProvider<EntriesViewModel, EntriesState>(EntriesViewModel.new);
 
+/// Calendar and list data used by the Entries page.
 class EntriesState {
   const EntriesState({
     required this.visibleMonth,
@@ -30,6 +31,7 @@ class EntriesState {
   }
 }
 
+/// Loads diary dates and moves the calendar between months.
 class EntriesViewModel extends AsyncNotifier<EntriesState> {
   int _monthRequestId = 0;
 

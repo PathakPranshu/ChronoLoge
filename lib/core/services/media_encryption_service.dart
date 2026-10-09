@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
+/// Encrypts diary files and creates short-lived clear copies for playback.
 class MediaEncryptionService {
   MediaEncryptionService({FlutterSecureStorage? storage})
     : _storage = storage ?? const FlutterSecureStorage();

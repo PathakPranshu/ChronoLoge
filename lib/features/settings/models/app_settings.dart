@@ -4,6 +4,7 @@ enum DistanceUnit { kilometers, miles }
 
 enum TimeFormat { hour24, hour12 }
 
+/// A simple in-memory copy of every setting used by the UI.
 class AppSettings {
   const AppSettings({
     this.isDarkMode = false,

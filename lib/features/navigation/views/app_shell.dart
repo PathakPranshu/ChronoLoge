@@ -7,6 +7,7 @@ import '../../search/views/search_page.dart';
 import '../../settings/views/settings_page.dart';
 import '../../today/views/today_page.dart';
 
+/// Holds the main pages and switches them with the bottom navigation bar.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 

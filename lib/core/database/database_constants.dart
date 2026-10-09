@@ -1,6 +1,7 @@
+// Table and column names live here to prevent spelling mistakes in SQL.
 abstract final class DatabaseConstants {
   static const name = 'chronologe.db';
-  static const version = 7;
+  static const version = 9;
 }
 
 abstract final class DiaryEntriesTable {
@@ -13,10 +14,12 @@ abstract final class DiaryEntriesTable {
   static const updatedAt = 'updated_at';
 }
 
+// Media belongs to a diary summary or to one timeline item.
 abstract final class DiaryMediaTable {
   static const name = 'diary_media';
   static const id = 'id';
   static const entryDate = 'entry_date';
+  static const timelineItemId = 'timeline_item_id';
   static const mediaLocation = 'media_location';
   static const mediaType = 'media_type';
   static const sortOrder = 'sort_order';
@@ -32,12 +35,9 @@ abstract final class DiaryTimelineItemsTable {
   static const occurredAt = 'occurred_at';
   static const textData = 'text_data';
   static const mood = 'mood';
-  static const imageLocations = 'image_locations';
-  static const voiceMemoLocations = 'voice_memo_locations';
   static const source = 'source';
-  static const locationLabel = 'location_label';
-  static const weatherLabel = 'weather_label';
   static const eventType = 'event_type';
+  static const locationSnapshotId = 'location_snapshot_id';
   static const placeId = 'place_id';
   static const visitId = 'visit_id';
   static const tripId = 'trip_id';
@@ -45,6 +45,17 @@ abstract final class DiaryTimelineItemsTable {
   static const confidence = 'confidence';
 }
 
+// These snapshots keep historic diary locations after raw samples are deleted.
+abstract final class LocationSnapshotsTable {
+  static const name = 'location_snapshots';
+  static const id = 'id';
+  static const recordedAt = 'recorded_at';
+  static const latitude = 'latitude';
+  static const longitude = 'longitude';
+  static const locationLabel = 'location_label';
+}
+
+// These raw samples are temporary and help detect visits and trips.
 abstract final class LocationSamplesTable {
   static const name = 'location_samples';
   static const id = 'id';
@@ -110,6 +121,7 @@ abstract final class WeatherSnapshotsTable {
   static const cloudCoverPercent = 'cloud_cover_percent';
   static const windSpeedKph = 'wind_speed_kph';
   static const weatherCode = 'weather_code';
+  static const weatherLabel = 'weather_label';
   static const provider = 'provider';
   static const isHistorical = 'is_historical';
 }

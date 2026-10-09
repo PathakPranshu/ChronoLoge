@@ -5,20 +5,24 @@ import 'package:geolocator/geolocator.dart';
 
 import 'open_meteo_weather_service.dart';
 
+/// Location text and weather data shown at the top of Today.
 class WeatherLocation {
   const WeatherLocation({
     required this.location,
     required this.weather,
     this.latitude,
     this.longitude,
+    this.snapshot,
   });
 
   final String location;
   final String weather;
   final double? latitude;
   final double? longitude;
+  final OpenMeteoWeather? snapshot;
 }
 
+/// Gets the phone location, converts it to a name, and loads its weather.
 class WeatherLocationService {
   const WeatherLocationService();
 
@@ -71,13 +75,13 @@ class WeatherLocationService {
       final weather = await _weatherService.loadCurrent(
         latitude: position.latitude,
         longitude: position.longitude,
-        useFahrenheit: useFahrenheit,
       );
       return WeatherLocation(
         location: location,
-        weather: weather.summary,
+        weather: _weatherSummary(weather, useFahrenheit: useFahrenheit),
         latitude: position.latitude,
         longitude: position.longitude,
+        snapshot: weather,
       );
     } catch (_) {
       return WeatherLocation(
@@ -102,15 +106,15 @@ class WeatherLocationService {
           latitude: latitude,
           longitude: longitude,
           at: at,
-          useFahrenheit: useFahrenheit,
         ),
       ]);
       final weather = results[1] as OpenMeteoWeather;
       return WeatherLocation(
         location: results[0] as String,
-        weather: weather.summary,
+        weather: _weatherSummary(weather, useFahrenheit: useFahrenheit),
         latitude: latitude,
         longitude: longitude,
+        snapshot: weather,
       );
     } catch (_) {
       return const WeatherLocation(
@@ -160,5 +164,16 @@ class WeatherLocationService {
       if (value != null && value.trim().isNotEmpty) return value.trim();
     }
     return null;
+  }
+
+  String _weatherSummary(
+    OpenMeteoWeather weather, {
+    required bool useFahrenheit,
+  }) {
+    final temperature = useFahrenheit
+        ? (weather.temperature * 9 / 5) + 32
+        : weather.temperature;
+    final unit = useFahrenheit ? '°F' : '°C';
+    return '${weather.condition} • ${temperature.round()}$unit';
   }
 }

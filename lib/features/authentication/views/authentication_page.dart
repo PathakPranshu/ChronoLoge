@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/auth_mode.dart';
 import '../viewmodels/authentication_view_model.dart';
 
+/// Collects the user's sign-in or registration details.
 class AuthenticationPage extends ConsumerStatefulWidget {
   const AuthenticationPage({super.key});
 

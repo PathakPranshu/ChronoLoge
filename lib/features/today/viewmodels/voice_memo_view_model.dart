@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
+/// The possible stages of the voice recorder popup.
 enum VoiceMemoStage {
   ready,
   preparing,
@@ -17,6 +18,7 @@ enum VoiceMemoStage {
   error,
 }
 
+/// Starts, pauses, stops, previews, and saves one recording.
 class VoiceMemoViewModel extends ChangeNotifier {
   VoiceMemoViewModel({required this.dateKey}) {
     _playerStateSubscription = _player.playerStateStream.listen((_) {

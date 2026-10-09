@@ -11,6 +11,7 @@ final settingsViewModelProvider =
       SettingsViewModel.new,
     );
 
+/// Loads settings from SQLite and updates one setting at a time.
 class SettingsViewModel extends AsyncNotifier<AppSettings> {
   static const _themeKey = 'theme_mode';
   static const _accentKey = 'accent_color';

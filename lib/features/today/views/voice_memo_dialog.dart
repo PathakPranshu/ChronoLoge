@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../viewmodels/voice_memo_view_model.dart';
 
+/// Opens the recorder and returns the saved audio path, or null on cancel.
 Future<String?> showVoiceMemoDialog(
   BuildContext context, {
   required String dateKey,
@@ -15,6 +16,7 @@ Future<String?> showVoiceMemoDialog(
   );
 }
 
+// Owns the recorder view model for as long as the popup is open.
 class _VoiceMemoDialog extends StatefulWidget {
   const _VoiceMemoDialog({required this.dateKey});
 
@@ -174,6 +176,7 @@ class _PreparingView extends StatelessWidget {
   }
 }
 
+// First recorder screen: one play-shaped button starts recording.
 class _ReadyView extends StatelessWidget {
   const _ReadyView({super.key, required this.onStart});
 
@@ -219,6 +222,7 @@ class _ReadyView extends StatelessWidget {
   }
 }
 
+// Active recorder screen: timer plus pause and stop controls.
 class _RecordingView extends StatelessWidget {
   const _RecordingView({
     super.key,
@@ -288,6 +292,7 @@ class _RecordingView extends StatelessWidget {
   }
 }
 
+// Final recorder screen: replay the memo or add it to the diary.
 class _PreviewView extends StatelessWidget {
   const _PreviewView({
     super.key,

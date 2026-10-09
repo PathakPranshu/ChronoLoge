@@ -8,12 +8,14 @@ import 'features/settings/models/app_settings.dart';
 import 'features/settings/viewmodels/settings_view_model.dart';
 import 'firebase_options.dart';
 
+// The app starts here: initialize Flutter/Firebase, then create Riverpod.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const ProviderScope(child: MainApp()));
 }
 
+/// Builds the Material app and applies the saved light/dark theme.
 class MainApp extends ConsumerWidget {
   const MainApp({super.key});
 

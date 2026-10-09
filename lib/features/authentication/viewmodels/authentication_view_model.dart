@@ -20,6 +20,7 @@ final authenticationViewModelProvider =
       AuthenticationViewModel.new,
     );
 
+/// Handles Firebase sign-in, registration, Google sign-in, and sign-out.
 class AuthenticationViewModel extends Notifier<AuthenticationState> {
   bool _googleSignInInitialized = false;
 

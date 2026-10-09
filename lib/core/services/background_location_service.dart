@@ -8,6 +8,7 @@ import '../database/database_constants.dart';
 import '../database/diary_database.dart';
 import '../database/settings_database.dart';
 import '../database/tracking_database.dart';
+import '../utils/display_helpers.dart';
 import 'open_meteo_weather_service.dart';
 
 enum BackgroundTrackingStatus {
@@ -38,6 +39,10 @@ extension BackgroundTrackingStatusLabel on BackgroundTrackingStatus {
   };
 }
 
+/// Turns a stream of raw phone locations into useful diary events.
+///
+/// The main steps are: save a point, detect a stay, create a visit or trip,
+/// check weather, and finally add an automatic timeline item.
 class BackgroundLocationService {
   BackgroundLocationService(
     this._trackingDatabase,
@@ -312,21 +317,25 @@ class BackgroundLocationService {
     final place = placeId == null
         ? null
         : await _trackingDatabase.getPlace(placeId);
+    final locationSnapshotId = await _trackingDatabase.addLocationSnapshot(
+      recordedAt: point.recordedAt,
+      latitude: point.latitude,
+      longitude: point.longitude,
+      locationLabel: _placeLabel(place),
+    );
     await _diaryDatabase.addTimelineItem(
-      _dateKey(point.recordedAt.toLocal()),
+      formatDateKey(point.recordedAt.toLocal()),
       occurredAt: point.recordedAt,
       textData: 'Left ${_placeLabel(place)}',
       mood: '',
-      imageLocations: const [],
-      voiceMemoLocations: const [],
       source: 'automatic',
       eventType: 'departure',
+      locationSnapshotId: locationSnapshotId,
       placeId: placeId,
       visitId: visitId,
       tripId: tripId,
+      weatherSnapshotId: _lastWeather?[WeatherSnapshotsTable.id] as int?,
       confidence: (visit[VisitsTable.confidence]! as num).toDouble(),
-      locationLabel: _placeLabel(place),
-      weatherLabel: _weatherLabel(_lastWeather),
     );
     _activeVisit = null;
     onTimelineChanged?.call();
@@ -431,22 +440,26 @@ class BackgroundLocationService {
     }
 
     final place = matchedPlace ?? await _trackingDatabase.getPlace(placeId);
+    final locationSnapshotId = await _trackingDatabase.addLocationSnapshot(
+      recordedAt: candidate.startedAt,
+      latitude: candidate.latitude,
+      longitude: candidate.longitude,
+      locationLabel: _placeLabel(place),
+    );
     final timelineId = await _diaryDatabase.addTimelineItem(
-      _dateKey(candidate.startedAt.toLocal()),
+      formatDateKey(candidate.startedAt.toLocal()),
       occurredAt: candidate.startedAt,
       textData: isFirstVisit
           ? 'Visited a new place near ${_placeLabel(place)}'
           : 'Arrived at ${_placeLabel(place)}',
       mood: '',
-      imageLocations: const [],
-      voiceMemoLocations: const [],
       source: 'automatic',
       eventType: isFirstVisit ? 'new_place' : 'arrival',
+      locationSnapshotId: locationSnapshotId,
       placeId: placeId,
       visitId: visitId,
       tripId: completedTripId,
       confidence: candidate.confidence,
-      locationLabel: _placeLabel(place),
     );
     _activeVisit = {
       VisitsTable.id: visitId,
@@ -531,6 +544,7 @@ class BackgroundLocationService {
         cloudCoverPercent: weather.cloudCover,
         windSpeedKph: weather.windSpeed,
         weatherCode: weather.weatherCode,
+        weatherLabel: '${weather.condition}, ${weather.temperature.round()}°C',
       );
       final changed =
           previous == null ||
@@ -553,21 +567,27 @@ class BackgroundLocationService {
       final place = placeId == null
           ? null
           : await _trackingDatabase.getPlace(placeId);
+      final locationLabel = place == null
+          ? await _locationName(point.latitude, point.longitude)
+          : _placeLabel(place);
+      final locationSnapshotId = await _trackingDatabase.addLocationSnapshot(
+        recordedAt: retrievedAt,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        locationLabel: locationLabel,
+      );
       await _diaryDatabase.addTimelineItem(
-        _dateKey(retrievedAt.toLocal()),
+        formatDateKey(retrievedAt.toLocal()),
         occurredAt: retrievedAt,
         textData:
             'Weather: ${weather.condition}, ${weather.temperature.round()}°C',
         mood: '',
-        imageLocations: const [],
-        voiceMemoLocations: const [],
         source: 'automatic',
         eventType: 'weather',
+        locationSnapshotId: locationSnapshotId,
         placeId: placeId,
         visitId: visit?[VisitsTable.id] as int?,
         weatherSnapshotId: weatherId,
-        locationLabel: place == null ? '' : _placeLabel(place),
-        weatherLabel: '${weather.condition}, ${weather.temperature.round()}°C',
       );
       onTimelineChanged?.call();
     } catch (_) {
@@ -616,15 +636,6 @@ class BackgroundLocationService {
     return 'this place';
   }
 
-  String _weatherLabel(TrackingRow? weather) {
-    final temperature =
-        weather?[WeatherSnapshotsTable.temperatureCelsius] as num?;
-    final weatherCode = weather?[WeatherSnapshotsTable.weatherCode] as int?;
-    if (temperature == null || weatherCode == null) return '';
-    return '${OpenMeteoWeatherService.weatherLabel(weatherCode)}, '
-        '${temperature.round()}°C';
-  }
-
   String _activityForSpeed(double speedMetresSecond) {
     if (speedMetresSecond < 0.5) return 'stationary';
     if (speedMetresSecond < 2.2) return 'walking';
@@ -643,13 +654,6 @@ class BackgroundLocationService {
     currentStatus = status;
     onStatusChanged?.call(status);
     return status;
-  }
-
-  String _dateKey(DateTime date) {
-    final year = date.year.toString().padLeft(4, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    return '$year-$month-$day';
   }
 }
 

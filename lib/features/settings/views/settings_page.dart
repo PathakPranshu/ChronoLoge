@@ -8,6 +8,7 @@ import '../../tracking/viewmodels/background_tracking_controller.dart';
 import '../models/app_settings.dart';
 import '../viewmodels/settings_view_model.dart';
 
+/// Displays account, appearance, units, news, and backup controls.
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
@@ -347,6 +348,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 }
 
+// Reusable two-choice control used for temperature, distance, and time.
 class _UnitSettingRow<T> extends StatelessWidget {
   const _UnitSettingRow({
     required this.title,
@@ -383,6 +385,7 @@ class _UnitSettingRow<T> extends StatelessWidget {
   }
 }
 
+// One selectable color square in the accent-color grid.
 class _AccentColorBlock extends StatelessWidget {
   const _AccentColorBlock({
     required this.colorValue,

@@ -5,16 +5,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../../core/services/media_encryption_provider.dart';
+import '../../../core/utils/display_helpers.dart';
 import '../../../core/widgets/encrypted_media_image.dart';
+import '../../../core/widgets/mood_picker.dart';
+import '../../../core/widgets/voice_memo_player.dart';
 import '../../settings/models/app_settings.dart';
 import '../../settings/viewmodels/settings_view_model.dart';
 import '../viewmodels/today_view_model.dart';
 import 'voice_memo_dialog.dart';
 
+/// The main diary page for the current day.
+///
+/// Automatic mode shows the timeline and map. Manual mode shows the editable
+/// summary. All saving work is passed to TodayViewModel.
 class TodayPage extends ConsumerStatefulWidget {
   const TodayPage({super.key});
 
@@ -339,6 +344,7 @@ class _TodayPageState extends ConsumerState<TodayPage> {
 
 enum _AddAction { images, voiceMemo }
 
+// Lays out either automatic mode or manual mode below the page heading.
 class _TodayContent extends StatelessWidget {
   const _TodayContent({
     required this.today,
@@ -497,7 +503,7 @@ class _TodayContent extends StatelessWidget {
                   ),
                 ),
               ),
-              _MoodPicker(selectedMood: today.mood, onSelected: onMoodSelected),
+              MoodPicker(selectedMood: today.mood, onSelected: onMoodSelected),
             ],
           ),
           if (today.voiceMemoLocations.isNotEmpty) ...[
@@ -514,9 +520,10 @@ class _TodayContent extends StatelessWidget {
               index < today.voiceMemoLocations.length;
               index++
             ) ...[
-              _VoiceMemoPlayer(
+              VoiceMemoPlayer(
                 audioLocation: today.voiceMemoLocations[index],
                 memoNumber: index + 1,
+                showProgress: true,
                 onDelete: () =>
                     onDeleteVoiceMemo(today.voiceMemoLocations[index]),
               ),
@@ -552,6 +559,7 @@ class _TodayContent extends StatelessWidget {
   }
 }
 
+// Keeps the Timeline/Map tab choice local to this part of the page.
 class _TimelineMapSection extends StatefulWidget {
   const _TimelineMapSection({
     required this.items,
@@ -642,6 +650,7 @@ class _TimelineMapSectionState extends State<_TimelineMapSection>
   }
 }
 
+// Shows the current coordinates on the device map tiles.
 class _CurrentLocationMap extends StatelessWidget {
   const _CurrentLocationMap({
     super.key,
@@ -798,6 +807,7 @@ class _CurrentLocationMap extends StatelessWidget {
   }
 }
 
+// Draws the automatic events in time order.
 class _TimelineSection extends StatelessWidget {
   const _TimelineSection({
     super.key,
@@ -864,7 +874,10 @@ class _CurrentContextTimelineItem extends StatelessWidget {
         SizedBox(
           width: 62,
           child: Text(
-            _formatClockTime(occurredAt, timeFormat),
+            formatClockTime(
+              occurredAt,
+              use24Hour: timeFormat == TimeFormat.hour24,
+            ),
             style: Theme.of(context).textTheme.labelLarge,
           ),
         ),
@@ -913,7 +926,7 @@ class _TimelineItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final emoji = _moodEmoji(item.mood);
+    final emoji = moodEmoji(item.mood);
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -921,7 +934,10 @@ class _TimelineItemCard extends StatelessWidget {
           SizedBox(
             width: 62,
             child: Text(
-              _formatClockTime(item.occurredAt, timeFormat),
+              formatClockTime(
+                item.occurredAt,
+                use24Hour: timeFormat == TimeFormat.hour24,
+              ),
               style: Theme.of(context).textTheme.labelLarge,
             ),
           ),
@@ -1021,7 +1037,7 @@ class _TimelineItemCard extends StatelessWidget {
                             index < item.voiceMemoLocations.length;
                             index++
                           ) ...[
-                            _VoiceMemoPlayer(
+                            VoiceMemoPlayer(
                               audioLocation: item.voiceMemoLocations[index],
                               memoNumber: index + 1,
                             ),
@@ -1108,6 +1124,7 @@ class _TimelineContextRow extends StatelessWidget {
   }
 }
 
+// Temporary form values returned by the add/edit snippet dialog.
 class _SnippetDraft {
   const _SnippetDraft({
     required this.occurredAt,
@@ -1128,6 +1145,7 @@ class _SnippetDraft {
   final List<String> newVoiceMemoLocations;
 }
 
+// Popup used to add a new timeline snippet or edit an existing one.
 class _SnippetDialog extends StatefulWidget {
   const _SnippetDialog({
     required this.dateKey,
@@ -1214,7 +1232,10 @@ class _SnippetDialogState extends State<_SnippetDialog> {
                   children: [
                     Expanded(
                       child: Text(
-                        _formatClockTime(_occurredAt, widget.timeFormat),
+                        formatClockTime(
+                          _occurredAt,
+                          use24Hour: widget.timeFormat == TimeFormat.hour24,
+                        ),
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.normal,
                         ),
@@ -1263,7 +1284,7 @@ class _SnippetDialogState extends State<_SnippetDialog> {
                   children: [
                     Text('Mood', style: theme.textTheme.titleSmall),
                     const Spacer(),
-                    _MoodPicker(
+                    MoodPicker(
                       selectedMood: _mood,
                       onSelected: (mood) => setState(() => _mood = mood),
                     ),
@@ -1477,28 +1498,6 @@ class _SnippetDialogState extends State<_SnippetDialog> {
   }
 }
 
-String _formatClockTime(DateTime time, TimeFormat format) {
-  final minute = time.minute.toString().padLeft(2, '0');
-  if (format == TimeFormat.hour24) {
-    return '${time.hour.toString().padLeft(2, '0')}:$minute';
-  }
-  final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
-  final period = time.hour < 12 ? 'am' : 'pm';
-  return '$hour:$minute $period';
-}
-
-String? _moodEmoji(String mood) {
-  return switch (mood) {
-    'Great' => '😄',
-    'Happy' => '😊',
-    'Calm' => '😌',
-    'Tired' => '😴',
-    'Sad' => '😔',
-    'Stressed' => '😣',
-    _ => null,
-  };
-}
-
 class _ContextPill extends StatelessWidget {
   const _ContextPill({required this.icon, required this.label});
 
@@ -1526,252 +1525,7 @@ class _ContextPill extends StatelessWidget {
   }
 }
 
-class _MoodPicker extends StatefulWidget {
-  const _MoodPicker({required this.selectedMood, required this.onSelected});
-
-  final String selectedMood;
-  final ValueChanged<String> onSelected;
-
-  @override
-  State<_MoodPicker> createState() => _MoodPickerState();
-}
-
-class _MoodPickerState extends State<_MoodPicker> {
-  static const _moods = [
-    ('Great', '😄'),
-    ('Happy', '😊'),
-    ('Calm', '😌'),
-    ('Tired', '😴'),
-    ('Sad', '😔'),
-    ('Stressed', '😣'),
-  ];
-
-  final MenuController _menuController = MenuController();
-
-  @override
-  Widget build(BuildContext context) {
-    final selectedEmoji = _moods
-        .where((mood) => mood.$1 == widget.selectedMood)
-        .map((mood) => mood.$2)
-        .firstOrNull;
-    final colors = Theme.of(context).colorScheme;
-
-    return MenuAnchor(
-      controller: _menuController,
-      alignmentOffset: const Offset(-144, 6),
-      menuChildren: [
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: SizedBox(
-            width: 168,
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final mood in _moods)
-                  Tooltip(
-                    message: mood.$1,
-                    child: Semantics(
-                      label: mood.$1,
-                      selected: widget.selectedMood == mood.$1,
-                      button: true,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () {
-                          widget.onSelected(mood.$1);
-                          _menuController.close();
-                        },
-                        child: Container(
-                          width: 48,
-                          height: 44,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: widget.selectedMood == mood.$1
-                                ? colors.secondaryContainer
-                                : null,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            mood.$2,
-                            style: const TextStyle(fontSize: 24),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ],
-      builder: (context, controller, child) => IconButton.filledTonal(
-        tooltip: 'Choose mood',
-        onPressed: () =>
-            controller.isOpen ? controller.close() : controller.open(),
-        icon: Text(selectedEmoji ?? '🙂', style: const TextStyle(fontSize: 22)),
-      ),
-    );
-  }
-}
-
-class _VoiceMemoPlayer extends ConsumerStatefulWidget {
-  const _VoiceMemoPlayer({
-    required this.audioLocation,
-    required this.memoNumber,
-    this.onDelete,
-  });
-
-  final String audioLocation;
-  final int memoNumber;
-  final VoidCallback? onDelete;
-
-  @override
-  ConsumerState<_VoiceMemoPlayer> createState() => _VoiceMemoPlayerState();
-}
-
-class _VoiceMemoPlayerState extends ConsumerState<_VoiceMemoPlayer> {
-  final AudioPlayer _player = AudioPlayer();
-  bool _isLoaded = false;
-  String? _playbackPath;
-
-  @override
-  void dispose() {
-    unawaited(_disposePlayback());
-    super.dispose();
-  }
-
-  Future<void> _disposePlayback() async {
-    await _player.dispose();
-    final playbackPath = _playbackPath;
-    if (playbackPath == null) return;
-    try {
-      final file = File(playbackPath);
-      if (await file.exists()) await file.delete();
-    } on FileSystemException {
-      // Temporary playback files are also cleared by the operating system.
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
-        child: Row(
-          children: [
-            StreamBuilder<PlayerState>(
-              stream: _player.playerStateStream,
-              builder: (context, snapshot) {
-                final playerState = snapshot.data;
-                final isPlaying = playerState?.playing ?? false;
-                final isLoading =
-                    playerState?.processingState == ProcessingState.loading ||
-                    playerState?.processingState == ProcessingState.buffering;
-                return IconButton.filledTonal(
-                  tooltip: isPlaying ? 'Pause' : 'Play',
-                  onPressed: isLoading ? null : _togglePlayback,
-                  icon: isLoading
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          isPlaying
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                        ),
-                );
-              },
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Voice memo ${widget.memoNumber}'),
-                  StreamBuilder<Duration>(
-                    stream: _player.positionStream,
-                    builder: (context, snapshot) {
-                      final position = snapshot.data ?? Duration.zero;
-                      final duration = _player.duration ?? Duration.zero;
-                      final maxMilliseconds = duration.inMilliseconds
-                          .clamp(1, 1 << 31)
-                          .toDouble();
-                      final positionMilliseconds = position.inMilliseconds
-                          .clamp(0, maxMilliseconds.toInt())
-                          .toDouble();
-                      return Row(
-                        children: [
-                          Expanded(
-                            child: Slider(
-                              value: positionMilliseconds,
-                              max: maxMilliseconds,
-                              onChanged: _isLoaded
-                                  ? (value) => _player.seek(
-                                      Duration(milliseconds: value.round()),
-                                    )
-                                  : null,
-                            ),
-                          ),
-                          Text(
-                            _formatDuration(
-                              duration == Duration.zero ? position : duration,
-                            ),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-            if (widget.onDelete != null)
-              IconButton(
-                tooltip: 'Delete voice memo',
-                onPressed: widget.onDelete,
-                icon: const Icon(Icons.close_rounded),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _togglePlayback() async {
-    try {
-      if (!_isLoaded) {
-        _playbackPath = await ref
-            .read(mediaEncryptionServiceProvider)
-            .createPlaybackCopy(widget.audioLocation);
-        await _player.setFilePath(_playbackPath!);
-        _isLoaded = true;
-      }
-      if (_player.processingState == ProcessingState.completed) {
-        await _player.seek(Duration.zero);
-      }
-      if (_player.playing) {
-        await _player.pause();
-      } else {
-        await _player.play();
-      }
-      if (mounted) setState(() {});
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This voice memo could not be played.')),
-      );
-    }
-  }
-
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes;
-    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-}
-
+// Displays one encrypted diary image with a delete button.
 class _DiaryImage extends StatelessWidget {
   const _DiaryImage({required this.imageLocation, required this.onDelete});
 

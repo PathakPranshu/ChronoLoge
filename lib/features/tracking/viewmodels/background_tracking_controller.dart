@@ -23,6 +23,7 @@ final backgroundTrackingControllerProvider =
       BackgroundTrackingStatus
     >(BackgroundTrackingController.new);
 
+/// Starts or stops location tracking when the saved setting changes.
 class BackgroundTrackingController
     extends AsyncNotifier<BackgroundTrackingStatus> {
   @override

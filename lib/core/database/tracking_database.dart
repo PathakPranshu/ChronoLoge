@@ -5,6 +5,7 @@ import 'database_constants.dart';
 
 typedef TrackingRow = Map<String, Object?>;
 
+/// Contains the SQLite queries used by background location and weather work.
 class TrackingDatabase {
   // Creates the tracking data-access layer backed by the shared app database.
   const TrackingDatabase(this._appDatabase);
@@ -57,6 +58,22 @@ class TrackingDatabase {
       where: '${LocationSamplesTable.recordedAt} < ?',
       whereArgs: [cutoff.toUtc().toIso8601String()],
     );
+  }
+
+  // Stores a persistent location snapshot used by a diary timeline event.
+  Future<int> addLocationSnapshot({
+    required DateTime recordedAt,
+    required double latitude,
+    required double longitude,
+    required String locationLabel,
+  }) async {
+    final database = await _appDatabase.database;
+    return database.insert(LocationSnapshotsTable.name, {
+      LocationSnapshotsTable.recordedAt: recordedAt.toUtc().toIso8601String(),
+      LocationSnapshotsTable.latitude: latitude,
+      LocationSnapshotsTable.longitude: longitude,
+      LocationSnapshotsTable.locationLabel: locationLabel.trim(),
+    });
   }
 
   // Creates a recognized or candidate place and returns its identifier.
@@ -285,6 +302,7 @@ class TrackingDatabase {
     required double cloudCoverPercent,
     required double windSpeedKph,
     required int weatherCode,
+    required String weatherLabel,
     bool isHistorical = false,
     String provider = 'open_meteo',
   }) async {
@@ -301,6 +319,7 @@ class TrackingDatabase {
       WeatherSnapshotsTable.cloudCoverPercent: cloudCoverPercent,
       WeatherSnapshotsTable.windSpeedKph: windSpeedKph,
       WeatherSnapshotsTable.weatherCode: weatherCode,
+      WeatherSnapshotsTable.weatherLabel: weatherLabel.trim(),
       WeatherSnapshotsTable.provider: provider,
       WeatherSnapshotsTable.isHistorical: isHistorical ? 1 : 0,
     });

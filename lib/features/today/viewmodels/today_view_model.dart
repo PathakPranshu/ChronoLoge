@@ -7,17 +7,21 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/database/database_providers.dart';
+import '../../../core/database/database_constants.dart';
 import '../../../core/database/diary_database.dart';
 import '../../../core/database/settings_database.dart';
+import '../../../core/database/tracking_database.dart';
 import '../../../core/services/media_encryption_provider.dart';
 import '../../../core/services/media_encryption_service.dart';
 import '../../../core/services/weather_location_service.dart';
+import '../../../core/utils/display_helpers.dart';
 import '../../settings/models/app_settings.dart';
 import '../../settings/viewmodels/settings_view_model.dart';
 
 final todayViewModelProvider =
     AsyncNotifierProvider<TodayViewModel, TodayState>(TodayViewModel.new);
 
+/// One event displayed in Today's automatic timeline.
 class TimelineItem {
   const TimelineItem({
     required this.id,
@@ -42,6 +46,7 @@ class TimelineItem {
   final String weatherLabel;
 }
 
+/// Everything the Today page needs to draw itself.
 class TodayState {
   const TodayState({
     required this.dateKey,
@@ -57,6 +62,7 @@ class TodayState {
     this.weatherLabel = 'Loading weather...',
     this.latitude,
     this.longitude,
+    this.weatherContext,
     this.isSavingText = false,
     this.isPickingImages = false,
     this.isAddingSnippet = false,
@@ -75,6 +81,7 @@ class TodayState {
   final String weatherLabel;
   final double? latitude;
   final double? longitude;
+  final WeatherLocation? weatherContext;
   final bool isSavingText;
   final bool isPickingImages;
   final bool isAddingSnippet;
@@ -91,6 +98,7 @@ class TodayState {
     String? weatherLabel,
     double? latitude,
     double? longitude,
+    WeatherLocation? weatherContext,
     bool? isSavingText,
     bool? isPickingImages,
     bool? isAddingSnippet,
@@ -109,6 +117,7 @@ class TodayState {
       weatherLabel: weatherLabel ?? this.weatherLabel,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      weatherContext: weatherContext ?? this.weatherContext,
       isSavingText: isSavingText ?? this.isSavingText,
       isPickingImages: isPickingImages ?? this.isPickingImages,
       isAddingSnippet: isAddingSnippet ?? this.isAddingSnippet,
@@ -116,6 +125,7 @@ class TodayState {
   }
 }
 
+/// Handles actions from the Today page and keeps TodayState up to date.
 class TodayViewModel extends AsyncNotifier<TodayState> {
   static const _diaryModeSetting = 'diary_mode';
   static const _mediaEncryptionMigrationSetting =
@@ -126,13 +136,14 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
       const WeatherLocationService();
 
   DiaryDatabase get _database => ref.read(diaryDatabaseProvider);
+  TrackingDatabase get _trackingDatabase => ref.read(trackingDatabaseProvider);
   MediaEncryptionService get _mediaEncryption =>
       ref.read(mediaEncryptionServiceProvider);
 
   @override
   Future<TodayState> build() async {
     final today = DateTime.now();
-    final dateKey = _dateKey(today);
+    final dateKey = formatDateKey(today);
     final settingsDatabase = ref.watch(settingsDatabaseProvider);
     final temperatureUnit = ref.watch(
       settingsViewModelProvider.select(
@@ -204,15 +215,23 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
     try {
       storedImages.addAll(await _copySnippetImages(current.dateKey, images));
       await _mediaEncryption.encryptFiles(voiceMemoLocations);
+      final locationSnapshotId = await _saveLocationSnapshot(
+        current,
+        occurredAt,
+        locationLabel,
+      );
+      final weatherSnapshotId = await _saveWeatherSnapshot(
+        current,
+        weatherLabel,
+      );
       await _database.addTimelineItem(
         current.dateKey,
         occurredAt: occurredAt,
         textData: text.trim(),
         mood: mood,
-        imageLocations: storedImages,
-        voiceMemoLocations: voiceMemoLocations,
-        locationLabel: _usableContextLabel(locationLabel),
-        weatherLabel: _usableContextLabel(weatherLabel),
+        media: _mediaInputs(storedImages, voiceMemoLocations),
+        locationSnapshotId: locationSnapshotId,
+        weatherSnapshotId: weatherSnapshotId,
       );
       savedToDatabase = true;
       await _reloadEntry(current.dateKey);
@@ -258,8 +277,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
         date: current.dateKey,
         textData: text.trim(),
         mood: mood,
-        imageLocations: finalImages,
-        voiceMemoLocations: finalVoiceMemos,
+        media: _mediaInputs(finalImages, finalVoiceMemos),
       );
       savedToDatabase = true;
 
@@ -395,6 +413,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
         weatherLabel: current.weatherLabel,
         latitude: current.latitude,
         longitude: current.longitude,
+        weatherContext: current.weatherContext,
         isAutomaticMode: current.isAutomaticMode,
         isSavingText: current.isSavingText,
       ),
@@ -411,8 +430,10 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
         .whereType<String>()
         .toList(growable: false);
     final timelineMedia = timelineRows.expand<String>((row) sync* {
-      yield* (row['image_locations'] as List<Object?>).whereType<String>();
-      yield* (row['voice_memo_locations'] as List<Object?>).whereType<String>();
+      for (final media in _timelineMedia(row)) {
+        final location = media['location'];
+        if (location is String) yield location;
+      }
     });
     await _mediaEncryption.encryptFiles([
       ...images,
@@ -422,7 +443,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
 
     return TodayState(
       dateKey: dateKey,
-      dateLabel: _formatDate(date),
+      dateLabel: formatFriendlyDate(date),
       title: entry?['title'] as String? ?? '',
       text: entry?['text_data'] as String? ?? '',
       mood: entry?['mood'] as String? ?? '',
@@ -437,12 +458,14 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
                   date,
               text: row['text_data'] as String? ?? '',
               mood: row['mood'] as String? ?? '',
-              imageLocations: (row['image_locations'] as List<Object?>)
-                  .whereType<String>()
-                  .toList(growable: false),
-              voiceMemoLocations: (row['voice_memo_locations'] as List<Object?>)
-                  .whereType<String>()
-                  .toList(growable: false),
+              imageLocations: _timelineMediaLocations(
+                row,
+                DiaryMediaTable.imageType,
+              ),
+              voiceMemoLocations: _timelineMediaLocations(
+                row,
+                DiaryMediaTable.voiceMemoType,
+              ),
               source: row['source'] as String? ?? 'snippet',
               locationLabel: row['location_label'] as String? ?? '',
               weatherLabel: row['weather_label'] as String? ?? '',
@@ -468,6 +491,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
         weatherLabel: weatherLocation.weather,
         latitude: weatherLocation.latitude,
         longitude: weatherLocation.longitude,
+        weatherContext: weatherLocation,
       ),
     );
   }
@@ -551,40 +575,67 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
     return storedLocations;
   }
 
-  String _dateKey(DateTime date) {
-    final year = date.year.toString().padLeft(4, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    return '$year-$month-$day';
+  // Saves the location shown in the snippet dialog as a permanent snapshot.
+  Future<int?> _saveLocationSnapshot(
+    TodayState current,
+    DateTime occurredAt,
+    String locationLabel,
+  ) async {
+    final latitude = current.latitude;
+    final longitude = current.longitude;
+    if (latitude == null || longitude == null) return null;
+
+    final cleanLabel = _usableContextLabel(locationLabel);
+    final fallbackLabel =
+        '${latitude.toStringAsFixed(4)}, '
+        '${longitude.toStringAsFixed(4)}';
+    return _trackingDatabase.addLocationSnapshot(
+      recordedAt: occurredAt,
+      latitude: latitude,
+      longitude: longitude,
+      locationLabel: cleanLabel.isEmpty ? fallbackLabel : cleanLabel,
+    );
   }
 
-  String _formatDate(DateTime date) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
+  // Saves the current structured weather data and its display label.
+  Future<int?> _saveWeatherSnapshot(
+    TodayState current,
+    String weatherLabel,
+  ) async {
+    final latitude = current.latitude;
+    final longitude = current.longitude;
+    final weather = current.weatherContext?.snapshot;
+    if (latitude == null || longitude == null || weather == null) return null;
+
+    return _trackingDatabase.addWeatherSnapshot(
+      observedAt: weather.observedAt,
+      retrievedAt: DateTime.now(),
+      latitude: latitude,
+      longitude: longitude,
+      temperatureCelsius: weather.temperature,
+      apparentTemperatureCelsius: weather.apparentTemperature,
+      precipitationMm: weather.precipitation,
+      cloudCoverPercent: weather.cloudCover,
+      windSpeedKph: weather.windSpeed,
+      weatherCode: weather.weatherCode,
+      weatherLabel: _usableContextLabel(weatherLabel),
+    );
+  }
+
+  // Converts image and audio paths into the generic database media format.
+  List<DiaryMediaInput> _mediaInputs(
+    List<String> imageLocations,
+    List<String> voiceMemoLocations,
+  ) {
+    return [
+      for (final location in imageLocations)
+        DiaryMediaInput(location: location, type: DiaryMediaTable.imageType),
+      for (final location in voiceMemoLocations)
+        DiaryMediaInput(
+          location: location,
+          type: DiaryMediaTable.voiceMemoType,
+        ),
     ];
-    return '${date.day}${_ordinalSuffix(date.day)} '
-        '${months[date.month - 1]} ${date.year}';
-  }
-
-  String _ordinalSuffix(int day) {
-    if (day >= 11 && day <= 13) return 'th';
-    return switch (day % 10) {
-      1 => 'st',
-      2 => 'nd',
-      3 => 'rd',
-      _ => 'th',
-    };
   }
 
   String _usableContextLabel(String label) {
@@ -597,5 +648,18 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
       'Location is turned off',
     };
     return unavailable.contains(label) ? '' : label;
+  }
+
+  Iterable<Map<String, Object?>> _timelineMedia(DiaryEntryMap row) {
+    return (row['media'] as List<Object?>? ?? const [])
+        .whereType<Map<String, Object?>>();
+  }
+
+  List<String> _timelineMediaLocations(DiaryEntryMap row, String mediaType) {
+    return _timelineMedia(row)
+        .where((media) => media['type'] == mediaType)
+        .map((media) => media['location'])
+        .whereType<String>()
+        .toList(growable: false);
   }
 }

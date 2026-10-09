@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../utils/display_helpers.dart';
+
+/// Structured weather returned by Open-Meteo.
 class OpenMeteoWeather {
   const OpenMeteoWeather({
     required this.observedAt,
@@ -28,6 +31,7 @@ class OpenMeteoWeather {
   String get summary => '$condition • ${temperature.round()}$temperatureUnit';
 }
 
+/// Makes current and historical weather requests to Open-Meteo.
 class OpenMeteoWeatherService {
   const OpenMeteoWeatherService();
 
@@ -66,7 +70,7 @@ class OpenMeteoWeatherService {
     required DateTime at,
     bool useFahrenheit = false,
   }) async {
-    final date = _dateKey(at);
+    final date = formatDateKey(at);
     final uri = Uri.https(_historicalHost, '/v1/forecast', {
       'latitude': latitude.toString(),
       'longitude': longitude.toString(),
@@ -84,7 +88,7 @@ class OpenMeteoWeatherService {
     final times = _list(hourly['time']);
     if (times.isEmpty) throw const OpenMeteoException();
     final targetHour = at.hour.toString().padLeft(2, '0');
-    final targetTime = '${_dateKey(at)}T$targetHour:00';
+    final targetTime = '${formatDateKey(at)}T$targetHour:00';
     final index = times.indexOf(targetTime);
     final selectedIndex = index < 0
         ? at.hour.clamp(0, times.length - 1)
@@ -145,13 +149,6 @@ class OpenMeteoWeatherService {
   double _number(Object? value) {
     if (value is! num) throw const OpenMeteoException();
     return value.toDouble();
-  }
-
-  String _dateKey(DateTime date) {
-    final year = date.year.toString().padLeft(4, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    return '$year-$month-$day';
   }
 
   static String weatherLabel(int code) {

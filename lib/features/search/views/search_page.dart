@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/diary_entry_tile.dart';
+import '../../entries/views/diary_view_page.dart';
 import '../viewmodels/search_view_model.dart';
 
+/// Searches dates, titles, diary text, moods, and timeline text.
 class SearchPage extends ConsumerWidget {
   const SearchPage({super.key});
 
@@ -35,8 +37,23 @@ class SearchPage extends ConsumerWidget {
                     ? const Center(child: Text('Search your diary entries.'))
                     : ListView.builder(
                         itemCount: entries.length,
-                        itemBuilder: (context, index) =>
-                            DiaryEntryTile(entry: entries[index]),
+                        itemBuilder: (context, index) {
+                          final entry = entries[index];
+                          final date = DateTime.tryParse(
+                            entry['date'] as String? ?? '',
+                          );
+                          return DiaryEntryTile(
+                            entry: entry,
+                            onTap: date == null
+                                ? null
+                                : () => Navigator.of(context).push<void>(
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          DiaryViewPage(date: date),
+                                    ),
+                                  ),
+                          );
+                        },
                       ),
               ),
             ),

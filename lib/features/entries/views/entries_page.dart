@@ -5,7 +5,9 @@ import '../../../core/database/diary_database.dart';
 import '../../../core/widgets/diary_entry_tile.dart';
 import '../viewmodels/entries_view_model.dart';
 import 'diary_entry_page.dart';
+import 'diary_view_page.dart';
 
+/// Lets the user find diary days using a calendar or newest-first list.
 class EntriesPage extends ConsumerWidget {
   const EntriesPage({super.key});
 
@@ -152,6 +154,7 @@ class _CalendarView extends ConsumerWidget {
                   context,
                   ref,
                   DateTime(month.year, month.month, day),
+                  hasData: entry != null,
                 ),
               );
             },
@@ -299,7 +302,7 @@ class _EntriesList extends ConsumerWidget {
             entry: entry,
             onTap: date == null
                 ? null
-                : () => _openDiaryEntry(context, ref, date),
+                : () => _openDiaryEntry(context, ref, date, hasData: true),
           );
         },
       ),
@@ -310,10 +313,14 @@ class _EntriesList extends ConsumerWidget {
 Future<void> _openDiaryEntry(
   BuildContext context,
   WidgetRef ref,
-  DateTime date,
-) async {
+  DateTime date, {
+  required bool hasData,
+}) async {
   final saved = await Navigator.of(context).push<bool>(
-    MaterialPageRoute(builder: (context) => DiaryEntryPage(date: date)),
+    MaterialPageRoute(
+      builder: (context) =>
+          hasData ? DiaryViewPage(date: date) : DiaryEntryPage(date: date),
+    ),
   );
   if (saved == true) {
     await ref.read(entriesViewModelProvider.notifier).refresh();

@@ -4,6 +4,10 @@ import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'database_constants.dart';
 import 'database_key_provider.dart';
 
+/// Opens the one encrypted SQLite database used by the whole app.
+///
+/// This file only creates tables and handles schema versions. Feature-specific
+/// queries live in DiaryDatabase, TrackingDatabase, and SettingsDatabase.
 class AppDatabase {
   AppDatabase({DatabaseKeyProvider? keyProvider})
     : _keyProvider = keyProvider ?? DatabaseKeyProvider();
@@ -44,10 +48,10 @@ class AppDatabase {
       )
     ''');
 
-    await _createDiaryMediaTable(database);
     await _createSettingsTable(database);
     await _createTrackingCoreTables(database);
     await _createTimelineItemsTable(database);
+    await _createDiaryMediaTable(database);
     await _createMemoryPromptsTable(database);
     await _seedTrackingSettings(database);
   }
@@ -63,13 +67,14 @@ class AppDatabase {
   Future<void> _resetSchema(Database database) async {
     const tables = [
       'memory_prompts',
+      'diary_media',
       'diary_timeline_items',
+      'location_snapshots',
       'trips',
       'visits',
       'location_samples',
       'weather_snapshots',
       'places',
-      'diary_media',
       'diary_images',
       'diary_voice_memos',
       'settings',
@@ -86,32 +91,52 @@ class AppDatabase {
       CREATE TABLE ${DiaryMediaTable.name} (
         ${DiaryMediaTable.id} INTEGER PRIMARY KEY AUTOINCREMENT,
         ${DiaryMediaTable.entryDate} TEXT NOT NULL,
+        ${DiaryMediaTable.timelineItemId} INTEGER,
         ${DiaryMediaTable.mediaLocation} TEXT NOT NULL,
-        ${DiaryMediaTable.mediaType} TEXT NOT NULL CHECK (
-          ${DiaryMediaTable.mediaType} IN (
-            '${DiaryMediaTable.imageType}',
-            '${DiaryMediaTable.voiceMemoType}'
-          )
-        ),
+        ${DiaryMediaTable.mediaType} TEXT NOT NULL,
         ${DiaryMediaTable.sortOrder} INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (${DiaryMediaTable.entryDate})
           REFERENCES ${DiaryEntriesTable.name} (${DiaryEntriesTable.date})
           ON DELETE CASCADE,
-        UNIQUE (
-          ${DiaryMediaTable.entryDate},
-          ${DiaryMediaTable.mediaLocation},
-          ${DiaryMediaTable.mediaType}
+        FOREIGN KEY (
+          ${DiaryMediaTable.timelineItemId},
+          ${DiaryMediaTable.entryDate}
+        ) REFERENCES ${DiaryTimelineItemsTable.name} (
+          ${DiaryTimelineItemsTable.id},
+          ${DiaryTimelineItemsTable.entryDate}
         )
+          ON DELETE CASCADE
       )
     ''');
 
     await database.execute('''
-      CREATE INDEX diary_media_entry_type_order_idx
+      CREATE INDEX diary_media_owner_type_order_idx
       ON ${DiaryMediaTable.name} (
         ${DiaryMediaTable.entryDate},
+        ${DiaryMediaTable.timelineItemId},
         ${DiaryMediaTable.mediaType},
         ${DiaryMediaTable.sortOrder}
       )
+    ''');
+
+    await database.execute('''
+      CREATE UNIQUE INDEX diary_media_entry_location_type_idx
+      ON ${DiaryMediaTable.name} (
+        ${DiaryMediaTable.entryDate},
+        ${DiaryMediaTable.mediaLocation},
+        ${DiaryMediaTable.mediaType}
+      )
+      WHERE ${DiaryMediaTable.timelineItemId} IS NULL
+    ''');
+
+    await database.execute('''
+      CREATE UNIQUE INDEX diary_media_timeline_location_type_idx
+      ON ${DiaryMediaTable.name} (
+        ${DiaryMediaTable.timelineItemId},
+        ${DiaryMediaTable.mediaLocation},
+        ${DiaryMediaTable.mediaType}
+      )
+      WHERE ${DiaryMediaTable.timelineItemId} IS NOT NULL
     ''');
   }
 
@@ -123,12 +148,9 @@ class AppDatabase {
         ${DiaryTimelineItemsTable.occurredAt} TEXT NOT NULL,
         ${DiaryTimelineItemsTable.textData} TEXT NOT NULL DEFAULT '',
         ${DiaryTimelineItemsTable.mood} TEXT NOT NULL DEFAULT '',
-        ${DiaryTimelineItemsTable.imageLocations} TEXT NOT NULL DEFAULT '[]',
-        ${DiaryTimelineItemsTable.voiceMemoLocations} TEXT NOT NULL DEFAULT '[]',
         ${DiaryTimelineItemsTable.source} TEXT NOT NULL DEFAULT 'snippet',
-        ${DiaryTimelineItemsTable.locationLabel} TEXT NOT NULL DEFAULT '',
-        ${DiaryTimelineItemsTable.weatherLabel} TEXT NOT NULL DEFAULT '',
         ${DiaryTimelineItemsTable.eventType} TEXT NOT NULL DEFAULT 'note',
+        ${DiaryTimelineItemsTable.locationSnapshotId} INTEGER,
         ${DiaryTimelineItemsTable.placeId} INTEGER,
         ${DiaryTimelineItemsTable.visitId} INTEGER,
         ${DiaryTimelineItemsTable.tripId} INTEGER,
@@ -137,6 +159,9 @@ class AppDatabase {
         FOREIGN KEY (${DiaryTimelineItemsTable.entryDate})
           REFERENCES ${DiaryEntriesTable.name} (${DiaryEntriesTable.date})
           ON DELETE CASCADE,
+        FOREIGN KEY (${DiaryTimelineItemsTable.locationSnapshotId})
+          REFERENCES ${LocationSnapshotsTable.name} (${LocationSnapshotsTable.id})
+          ON DELETE SET NULL,
         FOREIGN KEY (${DiaryTimelineItemsTable.placeId})
           REFERENCES ${PlacesTable.name} (${PlacesTable.id})
           ON DELETE SET NULL,
@@ -148,7 +173,11 @@ class AppDatabase {
           ON DELETE SET NULL,
         FOREIGN KEY (${DiaryTimelineItemsTable.weatherSnapshotId})
           REFERENCES ${WeatherSnapshotsTable.name} (${WeatherSnapshotsTable.id})
-          ON DELETE SET NULL
+          ON DELETE SET NULL,
+        UNIQUE (
+          ${DiaryTimelineItemsTable.id},
+          ${DiaryTimelineItemsTable.entryDate}
+        )
       )
     ''');
 
@@ -178,6 +207,21 @@ class AppDatabase {
     await database.execute('''
       CREATE INDEX location_samples_recorded_at_idx
       ON ${LocationSamplesTable.name} (${LocationSamplesTable.recordedAt})
+    ''');
+
+    await database.execute('''
+      CREATE TABLE ${LocationSnapshotsTable.name} (
+        ${LocationSnapshotsTable.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+        ${LocationSnapshotsTable.recordedAt} TEXT NOT NULL,
+        ${LocationSnapshotsTable.latitude} REAL NOT NULL,
+        ${LocationSnapshotsTable.longitude} REAL NOT NULL,
+        ${LocationSnapshotsTable.locationLabel} TEXT NOT NULL DEFAULT ''
+      )
+    ''');
+
+    await database.execute('''
+      CREATE INDEX location_snapshots_recorded_at_idx
+      ON ${LocationSnapshotsTable.name} (${LocationSnapshotsTable.recordedAt})
     ''');
 
     await database.execute('''
@@ -263,6 +307,7 @@ class AppDatabase {
         ${WeatherSnapshotsTable.cloudCoverPercent} REAL NOT NULL DEFAULT 0,
         ${WeatherSnapshotsTable.windSpeedKph} REAL NOT NULL DEFAULT 0,
         ${WeatherSnapshotsTable.weatherCode} INTEGER NOT NULL,
+        ${WeatherSnapshotsTable.weatherLabel} TEXT NOT NULL DEFAULT '',
         ${WeatherSnapshotsTable.provider} TEXT NOT NULL DEFAULT 'open_meteo',
         ${WeatherSnapshotsTable.isHistorical} INTEGER NOT NULL DEFAULT 0
       )

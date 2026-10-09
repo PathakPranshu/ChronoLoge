@@ -8,6 +8,7 @@ final searchViewModelProvider =
       SearchViewModel.new,
     );
 
+/// Waits briefly while the user types, then searches SQLite.
 class SearchViewModel extends AsyncNotifier<List<DiaryEntryMap>> {
   int _requestId = 0;
 
