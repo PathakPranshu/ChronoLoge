@@ -1,5 +1,10 @@
+import 'package:chronologe/core/themes/theme.dart';
+import 'package:chronologe/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'features/authentication/ui/login/login_screen.dart';
 
 import 'core/notifications/notification_service.dart';
 import 'firebase_options.dart';
@@ -10,10 +15,12 @@ Future<void> main() async {
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
+  WidgetsFlutterBinding.ensureInitialized();
+
   await NotificationService.instance.initialize();
   await NotificationService.instance.scheduleDailyPrompt();
 
-  runApp(const MainApp());
+  runApp(ProviderScope(child: const MainApp()));
 }
 
 class MainApp extends StatelessWidget {
@@ -21,36 +28,10 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(home: HomePage());
-  }
-}
-
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Hello World!'),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const NotificationDemoPage(),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.notifications_outlined),
-              label: const Text('Open notification demo'),
-            ),
-          ],
-        ),
-      ),
+    return MaterialApp(
+        theme: CustomTheme.lightThemeData(context),
+        darkTheme: CustomTheme.darkThemeData(context),
+        home: LoginScreen(),
     );
   }
 }
