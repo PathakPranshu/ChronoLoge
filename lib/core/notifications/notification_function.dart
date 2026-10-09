@@ -25,6 +25,8 @@ class NotificationFunction {
     android: AndroidNotificationDetails(
       'chronologe_reminders',
       'ChronoLoge Reminders',
+      icon: 'ic_stat_chronologe',
+      largeIcon: DrawableResourceAndroidBitmap('notification_large_icon'),
       channelDescription: 'Diary reminders and reflection prompts.',
       importance: Importance.defaultImportance,
       priority: Priority.defaultPriority,
@@ -37,6 +39,8 @@ class NotificationFunction {
         android: AndroidNotificationDetails(
           'chronologe_demo_alerts',
           'ChronoLoge Demo Alerts',
+          icon: 'ic_stat_chronologe',
+          largeIcon: DrawableResourceAndroidBitmap('notification_large_icon'),
           channelDescription: 'High-priority notification demonstrations.',
           importance: Importance.high,
           priority: Priority.high,

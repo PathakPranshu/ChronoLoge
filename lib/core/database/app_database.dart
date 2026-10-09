@@ -5,21 +5,48 @@ import 'database_constants.dart';
 import 'database_key_provider.dart';
 
 class AppDatabase {
-  AppDatabase({DatabaseKeyProvider? keyProvider})
-    : _keyProvider = keyProvider ?? DatabaseKeyProvider();
+  AppDatabase({required this.firebaseUid, DatabaseKeyProvider? keyProvider})
+    : _keyProvider = keyProvider ?? DatabaseKeyProvider(firebaseUid);
 
+  final String firebaseUid;
   final DatabaseKeyProvider _keyProvider;
   Future<Database>? _databaseFuture;
 
   Future<Database> get database => _databaseFuture ??= _open();
 
-  Future<Database> _open() async {
+  Future<String> get filePath async {
     final databasePath = await getDatabasesPath();
-    final fullPath = path.join(databasePath, DatabaseConstants.name);
-    final password = await _keyProvider.getOrCreateKey(
-      hasExistingDatabase: await databaseExists(fullPath),
-    );
+    return path.join(databasePath, DatabaseConstants.nameForUser(firebaseUid));
+  }
 
+  Future<Database> _open() async {
+    final fullPath = await filePath;
+    final password = await _keyProvider.getKey();
+    final hasExistingDatabase = await databaseExists(fullPath);
+
+    try {
+      return await _openWithPassword(fullPath, password);
+    } on DatabaseException catch (error) {
+      final isWrongKeyError = error.toString().contains('open_failed');
+      if (!hasExistingDatabase || !isWrongKeyError) rethrow;
+
+      // One-time migration for databases created by the earlier UID-key demo.
+      // The new random key is Base64URL, so it cannot contain a quote.
+      Database? legacyDatabase;
+      try {
+        legacyDatabase = await _openWithPassword(fullPath, firebaseUid);
+        await legacyDatabase.execute("PRAGMA rekey = '$password'");
+        await legacyDatabase.close();
+        legacyDatabase = null;
+        return await _openWithPassword(fullPath, password);
+      } catch (_) {
+        await legacyDatabase?.close();
+        rethrow;
+      }
+    }
+  }
+
+  Future<Database> _openWithPassword(String fullPath, String password) {
     return openDatabase(
       fullPath,
       password: password,

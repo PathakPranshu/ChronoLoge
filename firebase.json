@@ -1,1 +1,28 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"chronologe-app","appId":"1:360755010837:android:460134a6c6e57b3c5c9d1c","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"chronologe-app","configurations":{"android":"1:360755010837:android:460134a6c6e57b3c5c9d1c","ios":"1:360755010837:ios:dbe86555409b7fd05c9d1c"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "chronologe-app",
+          "appId": "1:360755010837:android:460134a6c6e57b3c5c9d1c",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "chronologe-app",
+          "configurations": {
+            "android": "1:360755010837:android:460134a6c6e57b3c5c9d1c",
+            "ios": "1:360755010837:ios:dbe86555409b7fd05c9d1c"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

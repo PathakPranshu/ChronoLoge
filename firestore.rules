@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/private/databaseKey {
+      function isOwner() {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      allow read: if isOwner();
+
+      allow create: if isOwner()
+                    && request.resource.data.keys().hasAll([
+                      'cipherKey',
+                      'keyVersion',
+                      'createdAt'
+                    ])
+                    && request.resource.data.keys().hasOnly([
+                      'cipherKey',
+                      'keyVersion',
+                      'createdAt'
+                    ])
+                    && request.resource.data.cipherKey is string
+                    && request.resource.data.cipherKey.size() == 44
+                    && request.resource.data.keyVersion == 1
+                    && request.resource.data.createdAt is timestamp;
+
+      // The database key is immutable once it has been created.
+      allow update, delete: if false;
+    }
+  }
+}

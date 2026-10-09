@@ -28,9 +28,7 @@ class NotificationService {
         _timeZoneAliases[timezoneInfo.identifier] ?? timezoneInfo.identifier;
     tz.setLocalLocation(tz.getLocation(timeZoneIdentifier));
 
-    const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
-    );
+    const androidSettings = AndroidInitializationSettings('ic_stat_chronologe');
 
     const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: false,

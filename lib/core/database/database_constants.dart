@@ -1,6 +1,13 @@
+import 'dart:convert';
+
 abstract final class DatabaseConstants {
-  static const name = 'chronologe.db';
   static const version = 2;
+
+  static String nameForUser(String firebaseUid) {
+    final encodedUid = base64UrlEncode(utf8.encode(firebaseUid))
+        .replaceAll('=', '');
+    return 'chronologe_$encodedUid.db';
+  }
 }
 
 abstract final class DiaryEntriesTable {

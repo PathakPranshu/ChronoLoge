@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Exposes the existing launcher artwork through the drawable namespace
+         required by flutter_local_notifications for large icons. -->
+    <item name="notification_large_icon" type="drawable">
+        @mipmap/ic_launcher_foreground
+    </item>
+</resources>

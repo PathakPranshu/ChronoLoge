@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'cloud_backup_demo.dart';
+import 'core/database/database_providers.dart';
 import 'features/authentication/shared/providers/auth_provider.dart';
 import 'features/authentication/ui/login/login_screen.dart';
 import 'notification_demo.dart';
@@ -52,6 +54,28 @@ class DemoWelcome extends ConsumerWidget {
                 return const Text("Signing out...");
               }
 
+              final databaseInitialization = ref.watch(
+                userDatabaseInitializationProvider(user.uid),
+              );
+              if (databaseInitialization.isLoading) {
+                return const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Preparing your encrypted diary...'),
+                  ],
+                );
+              }
+              if (databaseInitialization.hasError) {
+                return Text(
+                  'Could not prepare your encrypted diary:\n'
+                  '${databaseInitialization.error}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: colorTheme.error),
+                );
+              }
+
               final displayName = user.displayName ?? "User";
               final email = user.email ?? "unknown email";
 
@@ -86,6 +110,19 @@ class DemoWelcome extends ConsumerWidget {
                     },
                     icon: const Icon(Icons.notifications_outlined),
                     label: const Text('Open notification demo'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) =>
+                              CloudBackupDemoPage(firebaseUid: user.uid),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.cloud_upload_outlined),
+                    label: const Text('Open cloud backup demo'),
                   ),
                 ],
               );
