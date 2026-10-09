@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'features/authentication/shared/providers/auth_provider.dart';
 import 'features/authentication/ui/login/login_screen.dart';
+import 'notification_demo.dart';
 
 class DemoWelcome extends ConsumerWidget {
   const DemoWelcome({super.key});
@@ -73,6 +74,18 @@ class DemoWelcome extends ConsumerWidget {
                       color: colorTheme.onSurfaceVariant,
                     ),
                     textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const NotificationDemoPage(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.notifications_outlined),
+                    label: const Text('Open notification demo'),
                   ),
                 ],
               );

@@ -228,7 +228,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           const SizedBox(height: 6),
                           InputTextField(
                             controller: _passwordController,
-                            hintText: "########",
+                            hintText: "",
                             isPassword: true,
                           ),
                           const SizedBox(height: 2),

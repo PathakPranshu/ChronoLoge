@@ -211,7 +211,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         const SizedBox(height: 6),
                         InputTextField(
                           controller: _nameController,
-                          hintText: "e.g., Mahidhar Gowda",
+                          hintText: "e.g., User Name",
                           keyboardType: TextInputType.name,
                           enabled: !isProcessing,
                         ),
@@ -255,7 +255,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         const SizedBox(height: 6),
                         InputTextField(
                           controller: _passwordController,
-                          hintText: "########",
+                          hintText: "",
                           isPassword: true,
                           enabled: !isProcessing,
                           hasError: _passwordError != null,
@@ -283,7 +283,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         const SizedBox(height: 6),
                         InputTextField(
                           controller: _confirmPasswordController,
-                          hintText: "########",
+                          hintText: "",
                           isPassword: true,
                           enabled: !isProcessing,
                           hasError: _confirmPasswordError != null,
