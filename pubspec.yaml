@@ -12,8 +12,10 @@ dependencies:
   firebase_core: ^4.15.0
   flutter:
     sdk: flutter
+  flutter_local_notifications: ^19.4.2
   flutter_riverpod: ^3.4.3
   flutter_secure_storage: ^11.2.0
+  flutter_timezone: ^5.1.1
   google_fonts: ^8.2.1
   google_sign_in: ^7.2.0
   image_picker: ^1.2.3
@@ -24,6 +26,7 @@ dependencies:
   sqflite_sqlcipher: ^3.4.1
   table_calendar: ^3.2.1
   go_router: ^18.0.2
+  timezone: ^0.10.0
 
 dev_dependencies:
   flutter_test:

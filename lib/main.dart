@@ -6,10 +6,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'features/authentication/ui/login/login_screen.dart';
 
-void main() async {
+import 'core/notifications/notification_service.dart';
+
+Future<void> main() async async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await NotificationService.instance.initialize();
+  await NotificationService.instance.scheduleDailyPrompt();
 
   runApp(ProviderScope(child: const MainApp()));
 }
