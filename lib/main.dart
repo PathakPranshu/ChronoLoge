@@ -8,7 +8,7 @@ import 'features/authentication/ui/login/login_screen.dart';
 
 import 'core/notifications/notification_service.dart';
 
-Future<void> main() async async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
