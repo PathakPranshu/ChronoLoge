@@ -927,6 +927,7 @@ class _TimelineItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final emoji = moodEmoji(item.mood);
+    final isHealthItem = item.source.startsWith('health:');
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -963,7 +964,7 @@ class _TimelineItemCard extends StatelessWidget {
               child: Card(
                 margin: EdgeInsets.zero,
                 child: InkWell(
-                  onTap: onTap,
+                  onTap: isHealthItem ? null : onTap,
                   borderRadius: BorderRadius.circular(24),
                   child: Padding(
                     padding: const EdgeInsets.all(14),
@@ -992,17 +993,18 @@ class _TimelineItemCard extends StatelessWidget {
                                     ),
                             ),
                             const SizedBox(width: 6),
-                            IconButton(
-                              tooltip: 'Delete snippet',
-                              onPressed: onDelete,
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints.tightFor(
-                                width: 32,
-                                height: 32,
+                            if (!isHealthItem)
+                              IconButton(
+                                tooltip: 'Delete snippet',
+                                onPressed: onDelete,
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 32,
+                                  height: 32,
+                                ),
+                                icon: const Icon(Icons.close_rounded, size: 20),
                               ),
-                              icon: const Icon(Icons.close_rounded, size: 20),
-                            ),
                           ],
                         ),
                         if (emoji != null) ...[

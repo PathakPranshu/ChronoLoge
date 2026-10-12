@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/background_location_service.dart';
 import '../../authentication/viewmodels/authentication_view_model.dart';
 import '../../authentication/views/authentication_page.dart';
+import '../../integrations/health/viewmodels/health_integration_view_model.dart';
 import '../../tracking/viewmodels/background_tracking_controller.dart';
 import '../models/app_settings.dart';
 import '../viewmodels/settings_view_model.dart';
@@ -44,9 +45,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsViewModelProvider);
     final signedInUser = ref.watch(authenticatedUserProvider).value;
+    final authentication = ref.watch(authenticationViewModelProvider);
     final trackingStatus =
         ref.watch(backgroundTrackingControllerProvider).value ??
         BackgroundTrackingStatus.starting;
+    final healthIntegration = ref.watch(healthIntegrationViewModelProvider);
+    final healthStatus = healthIntegration.value;
 
     return SafeArea(
       child: settings.when(
@@ -66,20 +70,47 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _sectionTitle(context, 'Account'),
             const SizedBox(height: 8),
             Card(
-              child: ListTile(
-                leading: const Icon(Icons.account_circle_outlined),
-                title: Text(
-                  signedInUser == null
-                      ? 'Sign in'
-                      : signedInUser.displayName?.trim().isNotEmpty == true
-                      ? signedInUser.displayName!
-                      : 'Account',
-                ),
-                subtitle: Text(
-                  signedInUser?.email ?? 'Sync and back up your diary',
-                ),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: _openAuthentication,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.account_circle_outlined),
+                    title: Text(
+                      signedInUser == null
+                          ? 'Sign in'
+                          : signedInUser.displayName?.trim().isNotEmpty == true
+                          ? signedInUser.displayName!
+                          : 'Account',
+                    ),
+                    subtitle: Text(
+                      signedInUser?.email ?? 'Sync and back up your diary',
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _openAuthentication,
+                  ),
+                  if (signedInUser != null) ...[
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.badge_outlined),
+                      title: const Text('Display name'),
+                      subtitle: Text(
+                        signedInUser.displayName?.trim().isNotEmpty == true
+                            ? signedInUser.displayName!
+                            : 'Add your name',
+                      ),
+                      trailing: authentication.isLoading
+                          ? const SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.edit_outlined),
+                      onTap: authentication.isLoading
+                          ? null
+                          : () => _changeDisplayName(
+                              signedInUser.displayName ?? '',
+                            ),
+                    ),
+                  ],
+                ],
               ),
             ),
             const SizedBox(height: 24),
@@ -174,6 +205,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ),
                     ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            _sectionTitle(context, 'Integrations'),
+            const SizedBox(height: 8),
+            Card(
+              child: SwitchListTile.adaptive(
+                secondary: const Icon(Icons.favorite_outline_rounded),
+                title: const Text('Health'),
+                subtitle: Text(
+                  healthStatus?.message ?? 'Checking health connection...',
+                ),
+                value: settings.healthIntegrationEnabled,
+                onChanged:
+                    healthIntegration.isLoading ||
+                        (healthStatus?.isBusy ?? false)
+                    ? null
+                    : (value) => ref
+                          .read(healthIntegrationViewModelProvider.notifier)
+                          .setEnabled(value),
               ),
             ),
             const SizedBox(height: 24),
@@ -344,6 +395,92 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   void _openAuthentication() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (context) => const AuthenticationPage()),
+    );
+  }
+
+  Future<void> _changeDisplayName(String currentName) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _DisplayNameDialog(currentName: currentName),
+    );
+    if (!mounted || name == null) return;
+
+    final success = await ref
+        .read(authenticationViewModelProvider.notifier)
+        .updateDisplayName(name);
+    if (!mounted) return;
+
+    final message = success
+        ? 'Display name updated.'
+        : ref.read(authenticationViewModelProvider).errorMessage ??
+              'Could not update your name.';
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+// Small dialog used to edit the signed-in user's display name.
+class _DisplayNameDialog extends StatefulWidget {
+  const _DisplayNameDialog({required this.currentName});
+
+  final String currentName;
+
+  @override
+  State<_DisplayNameDialog> createState() => _DisplayNameDialogState();
+}
+
+class _DisplayNameDialogState extends State<_DisplayNameDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.currentName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  // Checks the name and returns it to the settings page.
+  void _save() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    Navigator.of(context).pop(_controller.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change display name'),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _controller,
+          textCapitalization: TextCapitalization.words,
+          textInputAction: TextInputAction.done,
+          decoration: const InputDecoration(
+            labelText: 'Name',
+            prefixIcon: Icon(Icons.person_outline_rounded),
+          ),
+          validator: (value) {
+            final cleanName = value?.trim() ?? '';
+            if (cleanName.isEmpty) return 'Enter your name.';
+            if (cleanName.length < 2) return 'Enter at least 2 characters.';
+            return null;
+          },
+          onFieldSubmitted: (_) => _save(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _save, child: const Text('Save')),
+      ],
     );
   }
 }

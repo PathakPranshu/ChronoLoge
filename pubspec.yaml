@@ -19,12 +19,14 @@ dependencies:
   geocoding: ^5.0.0
   geolocator: ^14.1.1
   google_sign_in: ^7.2.0
+  health: ^13.3.2
   http: ^1.6.0
   image_picker: ^1.2.3
   just_audio: ^0.10.6
   latlong2: ^0.10.1
   path: ^1.9.1
   path_provider: ^2.1.6
+  permission_handler: ^12.0.1
   record: ^7.1.1
   sqflite_sqlcipher: ^3.4.1
   table_calendar: ^3.2.1

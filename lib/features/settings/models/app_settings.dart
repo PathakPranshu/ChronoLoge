@@ -15,6 +15,7 @@ class AppSettings {
     this.distanceUnit = DistanceUnit.kilometers,
     this.timeFormat = TimeFormat.hour24,
     this.automaticTrackingEnabled = true,
+    this.healthIntegrationEnabled = false,
   });
 
   static const defaultAccentColorValue = 0xffa2391a;
@@ -27,6 +28,7 @@ class AppSettings {
   final DistanceUnit distanceUnit;
   final TimeFormat timeFormat;
   final bool automaticTrackingEnabled;
+  final bool healthIntegrationEnabled;
 
   AppSettings copyWith({
     bool? isDarkMode,
@@ -37,6 +39,7 @@ class AppSettings {
     DistanceUnit? distanceUnit,
     TimeFormat? timeFormat,
     bool? automaticTrackingEnabled,
+    bool? healthIntegrationEnabled,
   }) {
     return AppSettings(
       isDarkMode: isDarkMode ?? this.isDarkMode,
@@ -48,6 +51,8 @@ class AppSettings {
       timeFormat: timeFormat ?? this.timeFormat,
       automaticTrackingEnabled:
           automaticTrackingEnabled ?? this.automaticTrackingEnabled,
+      healthIntegrationEnabled:
+          healthIntegrationEnabled ?? this.healthIntegrationEnabled,
     );
   }
 }

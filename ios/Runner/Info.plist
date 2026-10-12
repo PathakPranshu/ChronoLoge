@@ -47,6 +47,10 @@
 	<string>ChronoLoge uses background location to privately build your automatic diary, recognize visits, and add local weather.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>ChronoLoge uses the microphone when you record a voice memo.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>ChronoLoge reads your selected steps and workouts to add activity context to your private diary.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>ChronoLoge only reads the health information you choose and does not change your health records.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

@@ -12,7 +12,8 @@ final firebaseAuthProvider = Provider<FirebaseAuth>(
 );
 
 final authenticatedUserProvider = StreamProvider<User?>((ref) {
-  return ref.watch(firebaseAuthProvider).authStateChanges();
+  // userChanges also refreshes the UI when profile fields such as name change.
+  return ref.watch(firebaseAuthProvider).userChanges();
 });
 
 final authenticationViewModelProvider =
@@ -49,21 +50,29 @@ class AuthenticationViewModel extends Notifier<AuthenticationState> {
   }
 
   Future<bool> register({
+    required String name,
     required String email,
     required String password,
     required String confirmPassword,
   }) async {
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) {
+      state = state.copyWith(errorMessage: 'Enter your name.');
+      return false;
+    }
     if (password != confirmPassword) {
       state = state.copyWith(errorMessage: 'The passwords do not match.');
       return false;
     }
 
-    return _runAuthAction(
-      () => _auth.createUserWithEmailAndPassword(
+    return _runAuthAction(() async {
+      final account = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
-      ),
-    );
+      );
+      await account.user?.updateDisplayName(cleanName);
+      return account;
+    });
   }
 
   Future<bool> signInWithGoogle() async {
@@ -99,6 +108,41 @@ class AuthenticationViewModel extends Notifier<AuthenticationState> {
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Google sign-in could not be completed.',
+      );
+      return false;
+    }
+  }
+
+  Future<bool> updateDisplayName(String name) async {
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) {
+      state = state.copyWith(errorMessage: 'Enter your name.');
+      return false;
+    }
+
+    final user = _auth.currentUser;
+    if (user == null) {
+      state = state.copyWith(
+        errorMessage: 'Sign in before changing your name.',
+      );
+      return false;
+    }
+
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await user.updateDisplayName(cleanName);
+      state = state.copyWith(isLoading: false, clearError: true);
+      return true;
+    } on FirebaseAuthException catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: _firebaseErrorMessage(error),
+      );
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Could not update your name. Please try again.',
       );
       return false;
     }

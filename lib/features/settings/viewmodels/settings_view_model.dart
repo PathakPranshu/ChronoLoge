@@ -21,6 +21,7 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
   static const _distanceUnitKey = 'distance_unit';
   static const _timeFormatKey = 'time_format';
   static const _automaticTrackingKey = 'automatic_tracking_enabled';
+  static const _healthIntegrationKey = 'health_integration_enabled';
 
   SettingsDatabase get _database => ref.read(settingsDatabaseProvider);
 
@@ -36,6 +37,7 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
       database.getSetting(_distanceUnitKey),
       database.getSetting(_timeFormatKey),
       database.getSetting(_automaticTrackingKey),
+      database.getSetting(_healthIntegrationKey),
     ]);
 
     return AppSettings(
@@ -54,6 +56,7 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
           ? TimeFormat.hour12
           : TimeFormat.hour24,
       automaticTrackingEnabled: values[7] != 'false',
+      healthIntegrationEnabled: values[8] == 'true',
     );
   }
 
@@ -103,6 +106,14 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
     await _writeSetting(_automaticTrackingKey, enabled.toString());
     state = AsyncData(
       state.requireValue.copyWith(automaticTrackingEnabled: enabled),
+    );
+  }
+
+  // Saves whether ChronoLoge may import steps and workouts.
+  Future<void> setHealthIntegrationEnabled(bool enabled) async {
+    await _writeSetting(_healthIntegrationKey, enabled.toString());
+    state = AsyncData(
+      state.requireValue.copyWith(healthIntegrationEnabled: enabled),
     );
   }
 

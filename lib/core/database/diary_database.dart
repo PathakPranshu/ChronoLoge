@@ -127,6 +127,55 @@ class DiaryDatabase {
     });
   }
 
+  // Adds an imported event once, or refreshes it when the same source is seen again.
+  Future<int> saveImportedTimelineItem(
+    String date, {
+    required DateTime occurredAt,
+    required String textData,
+    required String source,
+    required String eventType,
+  }) async {
+    final database = await _appDatabase.database;
+    return database.transaction((transaction) async {
+      await _ensureEntry(transaction, date);
+      final rows = await transaction.query(
+        DiaryTimelineItemsTable.name,
+        columns: [DiaryTimelineItemsTable.id],
+        where:
+            '${DiaryTimelineItemsTable.entryDate} = ? AND '
+            '${DiaryTimelineItemsTable.source} = ?',
+        whereArgs: [date, source],
+        limit: 1,
+      );
+      final values = <String, Object?>{
+        DiaryTimelineItemsTable.entryDate: date,
+        DiaryTimelineItemsTable.occurredAt: occurredAt
+            .toUtc()
+            .toIso8601String(),
+        DiaryTimelineItemsTable.textData: textData,
+        DiaryTimelineItemsTable.mood: '',
+        DiaryTimelineItemsTable.source: source,
+        DiaryTimelineItemsTable.eventType: eventType,
+        DiaryTimelineItemsTable.confidence: 1.0,
+      };
+
+      late final int id;
+      if (rows.isEmpty) {
+        id = await transaction.insert(DiaryTimelineItemsTable.name, values);
+      } else {
+        id = rows.single[DiaryTimelineItemsTable.id]! as int;
+        await transaction.update(
+          DiaryTimelineItemsTable.name,
+          values,
+          where: '${DiaryTimelineItemsTable.id} = ?',
+          whereArgs: [id],
+        );
+      }
+      await _touchEntry(transaction, date);
+      return id;
+    });
+  }
+
   // Replaces the editable content and media for one timeline item.
   Future<void> updateTimelineItem(
     int id, {

@@ -15,6 +15,7 @@ class AuthenticationPage extends ConsumerStatefulWidget {
 
 class _AuthenticationPageState extends ConsumerState<AuthenticationPage> {
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -24,6 +25,7 @@ class _AuthenticationPageState extends ConsumerState<AuthenticationPage> {
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -81,16 +83,6 @@ class _AuthenticationPageState extends ConsumerState<AuthenticationPage> {
             fontWeight: FontWeight.normal,
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          isSignIn
-              ? 'Sign in to sync and securely back up your diary.'
-              : 'Register to sync and securely back up your diary.',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: colors.onSurfaceVariant,
-          ),
-        ),
         const SizedBox(height: 28),
         SegmentedButton<AuthMode>(
           showSelectedIcon: false,
@@ -105,6 +97,7 @@ class _AuthenticationPageState extends ConsumerState<AuthenticationPage> {
                   ref
                       .read(authenticationViewModelProvider.notifier)
                       .selectMode(selection.first);
+                  _nameController.clear();
                   _confirmPasswordController.clear();
                   _formKey.currentState?.reset();
                 },
@@ -118,6 +111,24 @@ class _AuthenticationPageState extends ConsumerState<AuthenticationPage> {
               key: _formKey,
               child: Column(
                 children: [
+                  if (!isSignIn) ...[
+                    TextFormField(
+                      controller: _nameController,
+                      enabled: !authState.isLoading,
+                      textCapitalization: TextCapitalization.words,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.name],
+                      decoration: const InputDecoration(
+                        labelText: 'Name',
+                        prefixIcon: Icon(Icons.person_outline_rounded),
+                      ),
+                      onChanged: (_) => ref
+                          .read(authenticationViewModelProvider.notifier)
+                          .clearError(),
+                      validator: _validateName,
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   TextFormField(
                     controller: _emailController,
                     enabled: !authState.isLoading,
@@ -370,6 +381,13 @@ class _AuthenticationPageState extends ConsumerState<AuthenticationPage> {
     return null;
   }
 
+  String? _validateName(String? value) {
+    final name = value?.trim() ?? '';
+    if (name.isEmpty) return 'Enter your name.';
+    if (name.length < 2) return 'Enter at least 2 characters.';
+    return null;
+  }
+
   String? _validatePassword(String? value) {
     if (value == null || value.isEmpty) return 'Enter your password.';
     if (value.length < 6) return 'Use at least 6 characters.';
@@ -393,6 +411,7 @@ class _AuthenticationPageState extends ConsumerState<AuthenticationPage> {
             password: _passwordController.text,
           )
         : await notifier.register(
+            name: _nameController.text,
             email: _emailController.text,
             password: _passwordController.text,
             confirmPassword: _confirmPasswordController.text,
