@@ -1,12 +1,11 @@
-import 'package:chronologe/core/themes/theme.dart';
-import 'package:chronologe/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'features/authentication/ui/login/login_screen.dart';
-
 import 'core/notifications/notification_service.dart';
+import 'core/routing/router.dart';
+import 'core/themes/theme.dart';
+import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,15 +20,18 @@ Future<void> main() async {
   runApp(ProviderScope(child: const MainApp()));
 }
 
-class MainApp extends StatelessWidget {
+
+class MainApp extends ConsumerWidget {
   const MainApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final goRouter = ref.watch(goRouterProvider);
+
+    return MaterialApp.router(
         theme: CustomTheme.lightThemeData(context),
         darkTheme: CustomTheme.darkThemeData(context),
-        home: LoginScreen(),
+        routerConfig: goRouter,
     );
   }
 }

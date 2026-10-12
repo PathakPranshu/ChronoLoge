@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/routing/router_provider.dart';
 import 'features/authentication/shared/providers/auth_provider.dart';
-import 'features/authentication/ui/login/login_screen.dart';
 
 class DemoWelcome extends ConsumerWidget {
   const DemoWelcome({super.key});
@@ -28,9 +28,7 @@ class DemoWelcome extends ConsumerWidget {
             onPressed: () {
               ref.read(authRepositoryProvider).signOut();
 
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-              );
+              ref.read(sessionUnlockedProvider.notifier).lock();
             },
           ),
         ],

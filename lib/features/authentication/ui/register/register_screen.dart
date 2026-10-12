@@ -2,9 +2,10 @@ import 'package:chronologe/core/utils/gradient_rotation_matrix.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../../../demo.dart';
+import '../../../../core/routing/routes.dart';
 import '../../shared/widgets/input_text_field.dart';
 import 'register_viewmodel.dart';
 
@@ -104,13 +105,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         );
 
     if (success && mounted) {
-      // Direct navigation to mandatory on-device PIN setup
-      // context.go('/pin-setup');
-
-    // TODO: demo only; remove this
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const DemoWelcome()),
-    );
     }
   }
 
@@ -341,7 +335,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                   text: "Login",
                                   recognizer: TapGestureRecognizer()
                                     ..onTap = () {
-                                      Navigator.of(context).maybePop();
+                                      context.go(Routes.login);
                                     },
                                   style: GoogleFonts.geist(
                                     color: colorTheme.primary,

@@ -1,24 +1,44 @@
+import 'package:chronologe/core/database/user_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:local_auth_android/local_auth_android.dart';
+import 'package:local_auth_darwin/local_auth_darwin.dart';
 
-// Import your services and models here
+import '../secure_storage_service.dart';
 
 class AuthRepository {
   final FirebaseAuth _firebaseAuth;
   final GoogleSignIn _googleSignIn;
   final LocalAuthentication _localAuth;
+  final SecureStorageService _secureStorage;
+  final UserDatabase? _userDatabase;
 
   AuthRepository({
     FirebaseAuth? firebaseAuth,
     GoogleSignIn? googleSignIn,
     LocalAuthentication? localAuth,
+    SecureStorageService? secureStorage,
+    UserDatabase? userDatabase
   }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
        _googleSignIn = googleSignIn ?? GoogleSignIn.instance,
-       _localAuth = localAuth ?? LocalAuthentication();
+       _localAuth = localAuth ?? LocalAuthentication(),
+       _secureStorage = secureStorage ?? SecureStorageService(),
+       _userDatabase = userDatabase;
 
   /// Stream to listen to auth state changes (logged in or logged out)
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
+
+  // Synchronizes Firebase User data to local encrypted SQLite
+  Future<void> _syncToSqlite(User? user) async {
+    if (user == null || _userDatabase == null) return;
+    
+    await _userDatabase.upsertUser(
+      userId: user.uid,
+      name: user.displayName ?? 'User',
+      email: user.email ?? '',
+    );
+  }
 
   /// Handles Email and Password Login
   Future<void> signInWithEmailAndPassword(String email, String password) async {
@@ -28,8 +48,8 @@ class AuthRepository {
         password: password,
       );
 
-      // Internal data sync (e.g., upsert local SQLite User table)
-      // await _syncToSqlite(credential.user);
+      // Internal data sync (e.g., create SQLite User record)
+      await _syncToSqlite(credential.user);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'user-not-found' || e.code == "invalid-credential") {
         throw ('Email, or password is incorrect!');
@@ -63,9 +83,8 @@ class AuthRepository {
         credential,
       );
 
-      // Internal data sync (e.g., upsert local SQLite User table)
-      // await _syncToSqlite(userCredential.user);
-
+      // Internal data sync (e.g., create SQLite User record)
+      await _syncToSqlite(userCredential.user);
       return true;
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) {
@@ -94,7 +113,7 @@ class AuthRepository {
       await user?.updateDisplayName(name);
 
       // Internal data sync (e.g., create SQLite User record)
-      // await _syncToSqlite(userCredential.user);
+      await _syncToSqlite(userCredential.user);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'weak-password') {
         throw ('The password provided is too weak.');
@@ -125,5 +144,45 @@ class AuthRepository {
   Future<void> signOut() async {
     await _firebaseAuth.signOut();
     await _googleSignIn.signOut();
+
+    // Clears the PIN and Biometric preferences
+    await _secureStorage.clearSecurityData();
+  }
+
+  /* ---- BIOMETRICS SETUP ---- */
+
+  /// Checks if the device supports hardware biometric authentication
+  Future<bool> canUseBiometrics() async {
+    try {
+      final canAuthenticateWithBiometrics = await _localAuth.canCheckBiometrics;
+      final canAuthenticate =
+          canAuthenticateWithBiometrics || await _localAuth.isDeviceSupported();
+      return canAuthenticate;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Triggers the OS-level FaceID / Fingerprint prompt
+  Future<bool> authenticateWithBiometrics(
+    String reason,
+    String? siginTitle,
+    String? cancelTitle,
+  ) async {
+    try {
+      return await _localAuth.authenticate(
+        localizedReason: reason,
+        authMessages: <AuthMessages>[
+          AndroidAuthMessages(
+            signInTitle: siginTitle,
+            cancelButton: cancelTitle,
+          ),
+          IOSAuthMessages(cancelButton: cancelTitle),
+        ],
+        biometricOnly: true,
+      );
+    } catch (e) {
+      return false;
+    }
   }
 }

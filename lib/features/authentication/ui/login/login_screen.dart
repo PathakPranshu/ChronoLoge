@@ -2,11 +2,11 @@ import 'package:chronologe/core/utils/gradient_rotation_matrix.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../../../demo.dart';
+import '../../../../core/routing/routes.dart';
 import '../../shared/widgets/input_text_field.dart';
-import '../register/register_screen.dart';
 import 'login_viewmodel.dart';
 import 'widgets/forgot_password_sheet.dart';
 import 'widgets/google_signin_button.dart';
@@ -73,13 +73,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void _navigateToPinSetup() {
     if (!mounted) return;
 
-    //Navigate to Pin setup
-    //context.go('pin-setup');
-
-    // TODO: demo only; remove this
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const DemoWelcome()),
-    );
   }
 
   @override
@@ -296,13 +289,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               text: "Create an Account!",
                               recognizer: TapGestureRecognizer()
                                 ..onTap = () {
-                                  // TODO: update navigation to use go_router
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => RegisterScreen(),
-                                    ),
-                                  );
+                                  context.push(Routes.register);
                                 },
                               style: GoogleFonts.geist(
                                 color: colorTheme.primary,
