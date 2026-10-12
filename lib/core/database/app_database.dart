@@ -65,6 +65,14 @@ class AppDatabase {
       ON ${DiaryImagesTable.name} (${DiaryImagesTable.entryDate})
     ''');
 
+    await database.execute('''
+      CREATE TABLE ${UserTable.name} (
+        ${UserTable.userId} TEXT PRIMARY KEY,
+        ${UserTable.nameCol} TEXT NOT NULL,
+        ${UserTable.email} TEXT NOT NULL
+      )
+    ''');
+
     await _createSettingsTable(database);
   }
 
@@ -94,4 +102,15 @@ class AppDatabase {
       await (await databaseFuture).close();
     }
   }
+
+  // Wipes all sensitive user data from the local database during sign-out
+  /* Future<void> clearAllData() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete(DiaryImagesTable.name);
+      await txn.delete(DiaryEntriesTable.name);
+      await txn.delete(SettingsTable.name);
+      await txn.delete(UserTable.name);
+    });
+  } */
 }

@@ -3,6 +3,13 @@ abstract final class DatabaseConstants {
   static const version = 2;
 }
 
+abstract final class UserTable {
+  static const name = 'user';
+  static const userId = 'user_id';
+  static const nameCol = 'name';
+  static const email = 'email';
+}
+
 abstract final class DiaryEntriesTable {
   static const name = 'diary_entries';
   static const date = 'date';

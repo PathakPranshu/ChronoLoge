@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app_database.dart';
 import 'diary_database.dart';
 import 'settings_database.dart';
+import 'user_database.dart';
 
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final database = AppDatabase();
@@ -16,4 +17,8 @@ final diaryDatabaseProvider = Provider<DiaryDatabase>((ref) {
 
 final settingsDatabaseProvider = Provider<SettingsDatabase>((ref) {
   return SettingsDatabase(ref.watch(appDatabaseProvider));
+});
+
+final userDatabaseProvider = Provider<UserDatabase>((ref) {
+  return UserDatabase(ref.watch(appDatabaseProvider));
 });
