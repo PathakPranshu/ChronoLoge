@@ -61,6 +61,7 @@ class NumpadWidget extends StatelessWidget {
 
     return GestureDetector(
       onTap: () => onNumberTapped(number),
+      onTapDown: (details) => Feedback.forTap(context),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(

@@ -1,6 +1,6 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 class PinIndicator extends StatefulWidget {
   final int length;
@@ -44,7 +44,9 @@ class _PinIndicatorState extends State<PinIndicator>
   }
 
   void _shakeAndVibrate() {
-    HapticFeedback.heavyImpact(); 
+    Feedback.forLongPress(context);
+    Future.delayed(const Duration(milliseconds: 200));
+    Feedback.forLongPress(context);
     _controller.forward(from: 0);
   }
 
@@ -59,7 +61,7 @@ class _PinIndicatorState extends State<PinIndicator>
     final colorTheme = Theme.of(context).colorScheme;
 
     // Calculate a horizontal shake offset using a sine wave
-    // Multiplying by pi * 4 creates 2 full back-and-forth shakes. 
+    // Multiplying by pi * 4 creates 2 full back-and-forth shakes.
     // Multiplying by 10 determines the maximum pixel distance of the shake.
     final shakeOffset = sin(_animation.value * pi * 4) * 10;
 
@@ -78,14 +80,14 @@ class _PinIndicatorState extends State<PinIndicator>
               shape: BoxShape.circle,
               color: isFilled
                   ? widget.hasError
-                      ? colorTheme.error
-                      : colorTheme.onSurface
+                        ? colorTheme.error
+                        : colorTheme.onSurface
                   : Colors.transparent,
               border: Border.all(
                 color: isFilled
                     ? widget.hasError
-                        ? colorTheme.error
-                        : colorTheme.onSurface
+                          ? colorTheme.error
+                          : colorTheme.onSurface
                     : colorTheme.outline,
                 width: 1.5,
               ),
