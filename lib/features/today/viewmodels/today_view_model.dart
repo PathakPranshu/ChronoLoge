@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/constants/media_constants.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/database/database_constants.dart';
 import '../../../core/database/diary_database.dart';
@@ -345,6 +346,9 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
     state = AsyncData(current.copyWith(isPickingImages: true));
     try {
       final images = await _imagePicker.pickMultiImage(
+        maxWidth: diaryImageMaxDimension,
+        maxHeight: diaryImageMaxDimension,
+        imageQuality: diaryImageQuality,
         limit: 10,
         requestFullMetadata: false,
       );

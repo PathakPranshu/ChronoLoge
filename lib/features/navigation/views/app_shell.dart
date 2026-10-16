@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/notifications/notification_service.dart';
 import '../../entries/viewmodels/entries_view_model.dart';
 import '../../entries/views/entries_page.dart';
 import '../../integrations/health/viewmodels/health_integration_view_model.dart';
@@ -20,6 +23,7 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   int _selectedIndex = 0;
   late final AppLifecycleListener _lifecycleListener;
+  late final StreamSubscription<String> _notificationSubscription;
 
   static const _pages = [
     TodayPage(),
@@ -32,17 +36,25 @@ class _AppShellState extends ConsumerState<AppShell> {
   void initState() {
     super.initState();
     _lifecycleListener = AppLifecycleListener(onResume: _syncHealth);
+    _notificationSubscription = NotificationService.instance.payloads.listen(
+      _handleNotificationPayload,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final payload = NotificationService.instance.takePendingPayload();
+      if (payload != null) _handleNotificationPayload(payload);
+    });
   }
 
   @override
   void dispose() {
     _lifecycleListener.dispose();
+    unawaited(_notificationSubscription.cancel());
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(healthIntegrationViewModelProvider);
+    ref.watch(healthIntegrationViewModelProvider.select((_) => 0));
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: NavigationBar(
@@ -83,5 +95,13 @@ class _AppShellState extends ConsumerState<AppShell> {
     final settings = ref.read(settingsViewModelProvider).value;
     if (settings?.healthIntegrationEnabled != true) return;
     ref.read(healthIntegrationViewModelProvider.notifier).syncNow();
+  }
+
+  // Opens Today when a diary or memory notification is tapped.
+  void _handleNotificationPayload(String payload) {
+    if (!mounted || payload != 'today') return;
+    NotificationService.instance.takePendingPayload();
+    if (_selectedIndex == 0) return;
+    setState(() => _selectedIndex = 0);
   }
 }

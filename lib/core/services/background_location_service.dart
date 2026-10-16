@@ -9,6 +9,7 @@ import '../database/diary_database.dart';
 import '../database/settings_database.dart';
 import '../database/tracking_database.dart';
 import '../utils/display_helpers.dart';
+import '../notifications/notification_service.dart';
 import 'open_meteo_weather_service.dart';
 
 enum BackgroundTrackingStatus {
@@ -49,7 +50,9 @@ class BackgroundLocationService {
     this._diaryDatabase,
     this._settingsDatabase, [
     this._weatherService = const OpenMeteoWeatherService(),
-  ]);
+    NotificationService? notificationService,
+  ]) : _notificationService =
+           notificationService ?? NotificationService.instance;
 
   static const _stayRadiusMetres = 120.0;
   static const _departureRadiusMetres = 220.0;
@@ -62,6 +65,7 @@ class BackgroundLocationService {
   final DiaryDatabase _diaryDatabase;
   final SettingsDatabase _settingsDatabase;
   final OpenMeteoWeatherService _weatherService;
+  final NotificationService _notificationService;
 
   StreamSubscription<Position>? _positionSubscription;
   StreamSubscription<ServiceStatus>? _serviceStatusSubscription;
@@ -472,10 +476,15 @@ class BackgroundLocationService {
     };
 
     if (isFirstVisit) {
-      await _trackingDatabase.addMemoryPrompt(
+      final promptId = await _trackingDatabase.addMemoryPrompt(
         visitId: visitId,
         timelineItemId: timelineId,
         createdAt: confirmedAt,
+      );
+      await _showNewPlacePrompt(
+        promptId: promptId,
+        visitId: visitId,
+        placeLabel: _placeLabel(place),
       );
     }
     await _recordWeatherIfDue(
@@ -487,6 +496,41 @@ class BackgroundLocationService {
       force: true,
     );
     onTimelineChanged?.call();
+  }
+
+  // Shows a first-visit prompt once when the user has allowed it.
+  Future<void> _showNewPlacePrompt({
+    required int promptId,
+    required int visitId,
+    required String placeLabel,
+  }) async {
+    if (promptId == 0) return;
+    try {
+      final preferences = await Future.wait([
+        _settingsDatabase.getSetting('notifications_enabled'),
+        _settingsDatabase.getSetting('new_place_prompts_enabled'),
+      ]);
+      if (preferences[0] != 'true' || preferences[1] == 'false') {
+        await _trackingDatabase.updateMemoryPromptStatus(
+          promptId,
+          status: 'expired',
+          respondedAt: DateTime.now(),
+        );
+        return;
+      }
+
+      await _notificationService.showNewPlacePrompt(
+        visitId: visitId,
+        placeLabel: placeLabel,
+      );
+      await _trackingDatabase.updateMemoryPromptStatus(
+        promptId,
+        status: 'shown',
+        shownAt: DateTime.now(),
+      );
+    } catch (_) {
+      // Notification or settings failures must not interrupt location tracking.
+    }
   }
 
   Future<TrackingRow?> _findNearbyPlace(
@@ -651,6 +695,7 @@ class BackgroundLocationService {
   }
 
   BackgroundTrackingStatus _emit(BackgroundTrackingStatus status) {
+    if (currentStatus == status) return status;
     currentStatus = status;
     onStatusChanged?.call(status);
     return status;

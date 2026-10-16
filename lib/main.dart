@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/themes/theme.dart';
 import 'features/authentication/views/authentication_gate.dart';
+import 'features/notifications/viewmodels/notification_view_model.dart';
 import 'features/settings/models/app_settings.dart';
 import 'features/settings/viewmodels/settings_view_model.dart';
 import 'firebase_options.dart';
@@ -21,18 +22,25 @@ class MainApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings =
-        ref.watch(settingsViewModelProvider).value ?? const AppSettings();
-    final accentColor = Color(settings.accentColorValue);
+    ref.watch(notificationViewModelProvider.select((_) => 0));
+    final themeSettings = ref.watch(
+      settingsViewModelProvider.select((settings) {
+        final value = settings.value ?? const AppSettings();
+        return (
+          isDarkMode: value.isDarkMode,
+          accentColorValue: value.accentColorValue,
+        );
+      }),
+    );
+    final accentColor = Color(themeSettings.accentColorValue);
 
     return MaterialApp(
       title: 'ChronoLoge',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(accentColor),
       darkTheme: AppTheme.dark(accentColor),
-      themeMode: settings.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      themeAnimationDuration: const Duration(milliseconds: 300),
-      themeAnimationCurve: Curves.easeOutCubic,
+      themeMode: themeSettings.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      themeAnimationDuration: Duration.zero,
       home: const AuthenticationGate(),
     );
   }

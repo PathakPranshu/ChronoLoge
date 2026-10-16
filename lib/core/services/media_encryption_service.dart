@@ -62,6 +62,27 @@ class MediaEncryptionService {
     );
   }
 
+  // Returns the media key for the signed-in user's cloud backup.
+  Future<String> exportKey() async {
+    final keyBytes = await (await _getOrCreateKey()).extractBytes();
+    return base64UrlEncode(keyBytes);
+  }
+
+  // Restores the media key before downloaded files are displayed or played.
+  Future<void> importKey(String encodedKey) async {
+    List<int> keyBytes;
+    try {
+      keyBytes = base64Url.decode(encodedKey);
+    } on FormatException {
+      throw StateError('The backup contains an invalid media key.');
+    }
+    if (keyBytes.length != _keyLengthBytes) {
+      throw StateError('The backup contains an invalid media key.');
+    }
+    await _storage.write(key: _storageKey, value: encodedKey);
+    _keyFuture = Future.value(SecretKey(keyBytes));
+  }
+
   // Creates a temporary clear copy for players that require a file path.
   Future<String> createPlaybackCopy(String encryptedFilePath) async {
     final temporaryDirectory = await getTemporaryDirectory();

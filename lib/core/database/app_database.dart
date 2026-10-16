@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart';
 
 import 'database_constants.dart';
@@ -17,9 +20,13 @@ class AppDatabase {
 
   Future<Database> get database => _databaseFuture ??= _open();
 
-  Future<Database> _open() async {
+  Future<String> get filePath async {
     final databasePath = await getDatabasesPath();
-    final fullPath = path.join(databasePath, DatabaseConstants.name);
+    return path.join(databasePath, DatabaseConstants.name);
+  }
+
+  Future<Database> _open() async {
+    final fullPath = await filePath;
     final password = await _keyProvider.getOrCreateKey(
       hasExistingDatabase: await databaseExists(fullPath),
     );
@@ -34,6 +41,80 @@ class AppDatabase {
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
     );
+  }
+
+  // Creates a short-lived, closed copy that is safe to upload.
+  Future<File> createBackupSnapshot() async {
+    await database;
+    await close();
+    final source = File(await filePath);
+    final temporaryDirectory = await getTemporaryDirectory();
+    final snapshot = File(
+      path.join(
+        temporaryDirectory.path,
+        'chronologe_backup_${DateTime.now().microsecondsSinceEpoch}.db',
+      ),
+    );
+    try {
+      if (!await source.exists()) {
+        throw StateError('The diary database could not be found.');
+      }
+      await source.copy(snapshot.path);
+      return snapshot;
+    } catch (_) {
+      if (await snapshot.exists()) await snapshot.delete();
+      rethrow;
+    } finally {
+      await database;
+    }
+  }
+
+  // Returns the database key for the signed-in user's cloud backup.
+  Future<String> exportEncryptionKey() => _keyProvider.exportKey();
+
+  // Replaces the local database and rewrites old media paths atomically.
+  Future<void> restoreBackup({
+    required File backupFile,
+    required String databaseKey,
+    required Map<String, String> mediaPaths,
+  }) async {
+    final destinationPath = await filePath;
+    final destination = File(destinationPath);
+    final temporaryDirectory = await getTemporaryDirectory();
+    final rollback = File(
+      path.join(
+        temporaryDirectory.path,
+        'chronologe_before_restore_${DateTime.now().microsecondsSinceEpoch}.db',
+      ),
+    );
+    final oldKey = await _keyProvider.exportKey();
+
+    await close();
+    if (await destination.exists()) await destination.copy(rollback.path);
+
+    try {
+      await _keyProvider.importKey(databaseKey);
+      await backupFile.copy(destinationPath);
+      final restoredDatabase = await database;
+      await restoredDatabase.transaction((transaction) async {
+        for (final entry in mediaPaths.entries) {
+          await transaction.update(
+            DiaryMediaTable.name,
+            {DiaryMediaTable.mediaLocation: entry.value},
+            where: '${DiaryMediaTable.mediaLocation} = ?',
+            whereArgs: [entry.key],
+          );
+        }
+      });
+    } catch (_) {
+      await close();
+      await _keyProvider.importKey(oldKey);
+      if (await rollback.exists()) await rollback.copy(destinationPath);
+      await database;
+      rethrow;
+    } finally {
+      if (await rollback.exists()) await rollback.delete();
+    }
   }
 
   Future<void> _createSchema(Database database, int version) async {

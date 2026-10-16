@@ -16,6 +16,11 @@ class AppSettings {
     this.timeFormat = TimeFormat.hour24,
     this.automaticTrackingEnabled = true,
     this.healthIntegrationEnabled = false,
+    this.notificationsEnabled = false,
+    this.dailyReminderEnabled = true,
+    this.dailyReminderHour = 20,
+    this.dailyReminderMinute = 0,
+    this.newPlacePromptsEnabled = true,
   });
 
   static const defaultAccentColorValue = 0xffa2391a;
@@ -29,6 +34,11 @@ class AppSettings {
   final TimeFormat timeFormat;
   final bool automaticTrackingEnabled;
   final bool healthIntegrationEnabled;
+  final bool notificationsEnabled;
+  final bool dailyReminderEnabled;
+  final int dailyReminderHour;
+  final int dailyReminderMinute;
+  final bool newPlacePromptsEnabled;
 
   AppSettings copyWith({
     bool? isDarkMode,
@@ -40,6 +50,11 @@ class AppSettings {
     TimeFormat? timeFormat,
     bool? automaticTrackingEnabled,
     bool? healthIntegrationEnabled,
+    bool? notificationsEnabled,
+    bool? dailyReminderEnabled,
+    int? dailyReminderHour,
+    int? dailyReminderMinute,
+    bool? newPlacePromptsEnabled,
   }) {
     return AppSettings(
       isDarkMode: isDarkMode ?? this.isDarkMode,
@@ -53,6 +68,12 @@ class AppSettings {
           automaticTrackingEnabled ?? this.automaticTrackingEnabled,
       healthIntegrationEnabled:
           healthIntegrationEnabled ?? this.healthIntegrationEnabled,
+      notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
+      dailyReminderEnabled: dailyReminderEnabled ?? this.dailyReminderEnabled,
+      dailyReminderHour: dailyReminderHour ?? this.dailyReminderHour,
+      dailyReminderMinute: dailyReminderMinute ?? this.dailyReminderMinute,
+      newPlacePromptsEnabled:
+          newPlacePromptsEnabled ?? this.newPlacePromptsEnabled,
     );
   }
 }

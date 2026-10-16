@@ -22,6 +22,11 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
   static const _timeFormatKey = 'time_format';
   static const _automaticTrackingKey = 'automatic_tracking_enabled';
   static const _healthIntegrationKey = 'health_integration_enabled';
+  static const _notificationsKey = 'notifications_enabled';
+  static const _dailyReminderKey = 'daily_reminder_enabled';
+  static const _dailyReminderHourKey = 'daily_reminder_hour';
+  static const _dailyReminderMinuteKey = 'daily_reminder_minute';
+  static const _newPlacePromptsKey = 'new_place_prompts_enabled';
 
   SettingsDatabase get _database => ref.read(settingsDatabaseProvider);
 
@@ -38,6 +43,11 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
       database.getSetting(_timeFormatKey),
       database.getSetting(_automaticTrackingKey),
       database.getSetting(_healthIntegrationKey),
+      database.getSetting(_notificationsKey),
+      database.getSetting(_dailyReminderKey),
+      database.getSetting(_dailyReminderHourKey),
+      database.getSetting(_dailyReminderMinuteKey),
+      database.getSetting(_newPlacePromptsKey),
     ]);
 
     return AppSettings(
@@ -57,19 +67,34 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
           : TimeFormat.hour24,
       automaticTrackingEnabled: values[7] != 'false',
       healthIntegrationEnabled: values[8] == 'true',
+      notificationsEnabled: values[9] == 'true',
+      dailyReminderEnabled: values[10] != 'false',
+      dailyReminderHour: _validHour(values[11]),
+      dailyReminderMinute: _validMinute(values[12]),
+      newPlacePromptsEnabled: values[13] != 'false',
     );
   }
 
   Future<void> setDarkMode(bool enabled) async {
     final current = state.requireValue;
-    await _writeSetting(_themeKey, enabled ? 'dark' : 'light');
     state = AsyncData(current.copyWith(isDarkMode: enabled));
+    try {
+      await _writeSetting(_themeKey, enabled ? 'dark' : 'light');
+    } catch (_) {
+      state = AsyncData(current);
+      rethrow;
+    }
   }
 
   Future<void> setAccentColor(int colorValue) async {
     final current = state.requireValue;
-    await _writeSetting(_accentKey, colorValue.toString());
     state = AsyncData(current.copyWith(accentColorValue: colorValue));
+    try {
+      await _writeSetting(_accentKey, colorValue.toString());
+    } catch (_) {
+      state = AsyncData(current);
+      rethrow;
+    }
   }
 
   Future<void> setBackupsEnabled(bool enabled) async {
@@ -103,10 +128,14 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
   }
 
   Future<void> setAutomaticTrackingEnabled(bool enabled) async {
-    await _writeSetting(_automaticTrackingKey, enabled.toString());
-    state = AsyncData(
-      state.requireValue.copyWith(automaticTrackingEnabled: enabled),
-    );
+    final current = state.requireValue;
+    state = AsyncData(current.copyWith(automaticTrackingEnabled: enabled));
+    try {
+      await _writeSetting(_automaticTrackingKey, enabled.toString());
+    } catch (_) {
+      state = AsyncData(current);
+      rethrow;
+    }
   }
 
   // Saves whether ChronoLoge may import steps and workouts.
@@ -114,6 +143,47 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
     await _writeSetting(_healthIntegrationKey, enabled.toString());
     state = AsyncData(
       state.requireValue.copyWith(healthIntegrationEnabled: enabled),
+    );
+  }
+
+  // Saves the master notification preference.
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    await _writeSetting(_notificationsKey, enabled.toString());
+    state = AsyncData(
+      state.requireValue.copyWith(notificationsEnabled: enabled),
+    );
+  }
+
+  // Saves whether the daily diary reminder should be scheduled.
+  Future<void> setDailyReminderEnabled(bool enabled) async {
+    await _writeSetting(_dailyReminderKey, enabled.toString());
+    state = AsyncData(
+      state.requireValue.copyWith(dailyReminderEnabled: enabled),
+    );
+  }
+
+  // Saves the user's preferred local reminder time.
+  Future<void> setDailyReminderTime({
+    required int hour,
+    required int minute,
+  }) async {
+    await Future.wait([
+      _writeSetting(_dailyReminderHourKey, hour.toString()),
+      _writeSetting(_dailyReminderMinuteKey, minute.toString()),
+    ]);
+    state = AsyncData(
+      state.requireValue.copyWith(
+        dailyReminderHour: hour,
+        dailyReminderMinute: minute,
+      ),
+    );
+  }
+
+  // Saves whether first visits may show a photo prompt.
+  Future<void> setNewPlacePromptsEnabled(bool enabled) async {
+    await _writeSetting(_newPlacePromptsKey, enabled.toString());
+    state = AsyncData(
+      state.requireValue.copyWith(newPlacePromptsEnabled: enabled),
     );
   }
 
@@ -159,5 +229,15 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
     } on FormatException {
       return const [];
     }
+  }
+
+  static int _validHour(String? value) {
+    final hour = int.tryParse(value ?? '');
+    return hour != null && hour >= 0 && hour <= 23 ? hour : 20;
+  }
+
+  static int _validMinute(String? value) {
+    final minute = int.tryParse(value ?? '');
+    return minute != null && minute >= 0 && minute <= 59 ? minute : 0;
   }
 }

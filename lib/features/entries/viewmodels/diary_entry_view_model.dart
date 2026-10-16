@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/constants/media_constants.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/services/media_encryption_provider.dart';
 import '../../../core/services/media_encryption_service.dart';
@@ -121,6 +122,9 @@ class DiaryEntryViewModel extends AsyncNotifier<DiaryEntryState> {
 
     try {
       final images = await _imagePicker.pickMultiImage(
+        maxWidth: diaryImageMaxDimension,
+        maxHeight: diaryImageMaxDimension,
+        imageQuality: diaryImageQuality,
         limit: 10,
         requestFullMetadata: false,
       );

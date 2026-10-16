@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/constants/media_constants.dart';
 import '../../../core/utils/display_helpers.dart';
 import '../../../core/widgets/encrypted_media_image.dart';
 import '../../../core/widgets/mood_picker.dart';
@@ -1427,6 +1428,9 @@ class _SnippetDialogState extends State<_SnippetDialog> {
     switch (action) {
       case _AddAction.images:
         final images = await _imagePicker.pickMultiImage(
+          maxWidth: diaryImageMaxDimension,
+          maxHeight: diaryImageMaxDimension,
+          imageQuality: diaryImageQuality,
           limit: 10,
           requestFullMetadata: false,
         );
