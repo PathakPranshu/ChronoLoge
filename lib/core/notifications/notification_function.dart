@@ -1,46 +1,46 @@
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:awesome_notifications/awesome_notifications.dart';
 
 class NotificationFunction {
   NotificationFunction._();
 
-  static final FlutterLocalNotificationsPlugin plugin =
-      FlutterLocalNotificationsPlugin();
+  static final AwesomeNotifications plugin = AwesomeNotifications();
 
-  static const AndroidNotificationChannel channel =
-      AndroidNotificationChannel(
-    'chronologe_reminders',
-    'ChronoLoge Reminders',
-    description: 'Diary reminders and reflection prompts.',
-    importance: Importance.defaultImportance,
-  );
+  static const String channelKey = 'chronologe_reminders';
 
-  static const NotificationDetails notificationDetails =
-      NotificationDetails(
-    android: AndroidNotificationDetails(
-      'chronologe_reminders',
-      'ChronoLoge Reminders',
-      channelDescription: 'Diary reminders and reflection prompts.',
-      importance: Importance.defaultImportance,
-      priority: Priority.defaultPriority,
-    ),
-    iOS: DarwinNotificationDetails(),
-  );
+  static Future<void> initialize() async {
+    await plugin.initialize(
+      null,
+      [
+        NotificationChannel(
+          channelKey: channelKey,
+          channelName: 'ChronoLoge Reminders',
+          channelDescription: 'Diary reminders and reflection prompts.',
+          importance: NotificationImportance.Default,
+          playSound: true,
+        ),
+      ],
+    );
+  }
 
   static Future<void> pushNotification(String content) async {
-  await plugin.show(
-    1000,
-    'ChronoLoge',
-    content,
-    notificationDetails,
-  );
-}
+    await plugin.createNotification(
+      content: NotificationContent(
+        id: 1000,
+        channelKey: channelKey,
+        title: 'ChronoLoge',
+        body: content,
+      ),
+    );
+  }
 
-static Future<void> pushLocationPrompt() async {
-  await plugin.show(
-    1001,
-    'New Location Visited',
-    'Add a photo?',
-    notificationDetails,
-  );
-}
+  static Future<void> pushLocationPrompt() async {
+    await plugin.createNotification(
+      content: NotificationContent(
+        id: 1001,
+        channelKey: channelKey,
+        title: 'New Location Visited',
+        body: 'Add a photo?',
+      ),
+    );
+  }
 }

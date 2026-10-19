@@ -1,7 +1,5 @@
-import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
+
+import 'package:awesome_notifications/awesome_notifications.dart';
 
 import 'notification_function.dart';
 
@@ -13,70 +11,30 @@ class NotificationService {
   static const int _dailyNotificationId = 100;
 
   Future<void> initialize() async {
-    tz.initializeTimeZones();
-
-    final timezoneInfo = await FlutterTimezone.getLocalTimezone();
-    tz.setLocalLocation(tz.getLocation(timezoneInfo.identifier));
-
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const darwinSettings = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
-
-    const initializationSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: darwinSettings,
-    );
-
-    await NotificationFunction.plugin.initialize(
-      initializationSettings,
-    );
-
-    await NotificationFunction.plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(
-          NotificationFunction.channel,
-        );
-
+    await NotificationFunction.initialize();
     await _requestPermissions();
   }
 
   Future<void> _requestPermissions() async {
-    await NotificationFunction.plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
+    bool isAllowed =
+        await NotificationFunction.plugin.isNotificationAllowed();
 
-    await NotificationFunction.plugin
-        .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-        );
+    if (!isAllowed) {
+      await NotificationFunction.plugin.requestPermissionToSendNotifications();
+    }
   }
 
   Future<void> scheduleDailyPrompt({
     int? hour,
     int? minute,
   }) async {
-    await NotificationFunction.plugin.cancel(
-      _dailyNotificationId,
-    );
+    await NotificationFunction.plugin.cancel(_dailyNotificationId);
 
-    final now = tz.TZDateTime.now(tz.local);
-
+    final now = DateTime.now();
     final notificationHour = hour ?? 20;
     final notificationMinute = minute ?? 0;
 
-    var scheduledDate = tz.TZDateTime(
-      tz.local,
+    var scheduledDate = DateTime(
       now.year,
       now.month,
       now.day,
@@ -85,32 +43,34 @@ class NotificationService {
     );
 
     if (!scheduledDate.isAfter(now)) {
-      scheduledDate = scheduledDate.add(
-        const Duration(days: 1),
-      );
+      scheduledDate = scheduledDate.add(const Duration(days: 1));
     }
 
-    await NotificationFunction.plugin.zonedSchedule(
-      _dailyNotificationId,
-      'Your Diary Is Ready',
-      'Want to add finishing touches to today\'s entry?',
-      scheduledDate,
-      NotificationFunction.notificationDetails,
-      androidScheduleMode:
-          AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents:
-          DateTimeComponents.time,
+    final timeZone =
+        await NotificationFunction.plugin.getLocalTimeZoneIdentifier();
+
+    await NotificationFunction.plugin.createNotification(
+      content: NotificationContent(
+        id: _dailyNotificationId,
+        channelKey: NotificationFunction.channelKey,
+        title: 'Your Diary Is Ready',
+        body: "Want to add finishing touches to today's entry?",
+      ),
+      schedule: NotificationCalendar(
+        hour: scheduledDate.hour,
+        minute: scheduledDate.minute,
+        second: 0,
+        timeZone: timeZone,
+        repeats: true,
+      ),
     );
   }
 
   Future<void> cancelDailyPrompt() async {
-    await NotificationFunction.plugin.cancel(
-      _dailyNotificationId,
-    );
+    await NotificationFunction.plugin.cancel(_dailyNotificationId);
   }
 
-  Future<List<PendingNotificationRequest>>
-      getPendingNotifications() async {
-    return NotificationFunction.plugin.pendingNotificationRequests();
+  Future<List<NotificationModel>> getPendingNotifications() async {
+    return NotificationFunction.plugin.listScheduledNotifications();
   }
 }
