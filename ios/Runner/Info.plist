@@ -53,7 +53,12 @@
 	<string>ChronoLoge only reads the health information you choose and does not change your health records.</string>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>fetch</string>
 		<string>location</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.example.chronologe.hourlyTimeline</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

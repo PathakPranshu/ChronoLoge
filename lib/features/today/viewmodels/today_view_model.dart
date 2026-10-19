@@ -64,6 +64,7 @@ class TodayState {
     this.latitude,
     this.longitude,
     this.weatherContext,
+    this.currentStaySince,
     this.isSavingText = false,
     this.isPickingImages = false,
     this.isAddingSnippet = false,
@@ -83,6 +84,7 @@ class TodayState {
   final double? latitude;
   final double? longitude;
   final WeatherLocation? weatherContext;
+  final DateTime? currentStaySince;
   final bool isSavingText;
   final bool isPickingImages;
   final bool isAddingSnippet;
@@ -100,6 +102,7 @@ class TodayState {
     double? latitude,
     double? longitude,
     WeatherLocation? weatherContext,
+    DateTime? currentStaySince,
     bool? isSavingText,
     bool? isPickingImages,
     bool? isAddingSnippet,
@@ -119,6 +122,7 @@ class TodayState {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       weatherContext: weatherContext ?? this.weatherContext,
+      currentStaySince: currentStaySince ?? this.currentStaySince,
       isSavingText: isSavingText ?? this.isSavingText,
       isPickingImages: isPickingImages ?? this.isPickingImages,
       isAddingSnippet: isAddingSnippet ?? this.isAddingSnippet,
@@ -427,6 +431,16 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
   Future<TodayState> _loadToday(String dateKey, DateTime date) async {
     final entry = await _database.getEntry(dateKey, readOnly: true);
     final timelineRows = await _database.getTimelineItems(dateKey);
+    final activeVisit = await _trackingDatabase.getActiveVisit();
+    final activeTrip = activeVisit == null
+        ? await _trackingDatabase.getActiveTrip()
+        : null;
+    final currentStaySince = activeVisit == null
+        ? activeTrip == null
+              ? _stayStartFromTimeline(timelineRows)
+              : null
+        : DateTime.tryParse(activeVisit[VisitsTable.arrivedAt] as String? ?? '')
+              ?.toLocal();
     final images = (entry?['images_loc'] as List<Object?>? ?? const [])
         .whereType<String>()
         .toList(growable: false);
@@ -453,6 +467,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
       mood: entry?['mood'] as String? ?? '',
       imageLocations: images,
       voiceMemoLocations: voiceMemos,
+      currentStaySince: currentStaySince,
       timelineItems: timelineRows
           .map(
             (row) => TimelineItem(
@@ -477,6 +492,21 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
           )
           .toList(growable: false),
     );
+  }
+
+  // Uses today's latest arrival or baseline until movement is detected.
+  DateTime? _stayStartFromTimeline(List<DiaryEntryMap> rows) {
+    for (final row in rows.reversed) {
+      final eventType = row['event_type'] as String? ?? '';
+      if (eventType == 'departure') return null;
+      if (eventType == 'arrival' ||
+          eventType == 'new_place' ||
+          eventType == 'day_baseline') {
+        return DateTime.tryParse(row['occurred_at'] as String? ?? '')
+            ?.toLocal();
+      }
+    }
+    return null;
   }
 
   Future<void> _loadWeatherAfterBuild(

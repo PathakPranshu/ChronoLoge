@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/background_location_service.dart';
+import '../../../core/services/diagnostic_log_service.dart';
 import '../../authentication/viewmodels/authentication_view_model.dart';
 import '../../authentication/views/authentication_page.dart';
 import '../../integrations/health/viewmodels/health_integration_view_model.dart';
@@ -28,6 +30,7 @@ enum _SettingsSection {
   units,
   news,
   backups,
+  diagnostics,
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
@@ -324,6 +327,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               isExpanded: _openSection == _SettingsSection.backups,
               onTap: () => _toggleSection(_SettingsSection.backups),
               child: const _CloudBackupCard(),
+            ),
+            _CollapsibleSettingsSection(
+              title: 'Diagnostics',
+              icon: Icons.bug_report_outlined,
+              isExpanded: _openSection == _SettingsSection.diagnostics,
+              onTap: () => _toggleSection(_SettingsSection.diagnostics),
+              child: const _DiagnosticsCard(),
             ),
             const SizedBox(height: 12),
           ],
@@ -781,6 +791,188 @@ class _CloudBackupCard extends ConsumerWidget {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
     }
+  }
+}
+
+// Runs and exports the temporary background-collection diagnostic log.
+class _DiagnosticsCard extends ConsumerStatefulWidget {
+  const _DiagnosticsCard();
+
+  @override
+  ConsumerState<_DiagnosticsCard> createState() => _DiagnosticsCardState();
+}
+
+class _DiagnosticsCardState extends ConsumerState<_DiagnosticsCard> {
+  late Future<DiagnosticLogInfo> _info = DiagnosticLogService.getInfo();
+  bool _isBusy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Temporary log for background location and hourly weather. '
+              'It does not include exact coordinates, diary text, media paths, '
+              'passwords, or encryption keys.',
+            ),
+            const SizedBox(height: 10),
+            FutureBuilder<DiagnosticLogInfo>(
+              future: _info,
+              builder: (context, snapshot) {
+                final info = snapshot.data;
+                if (info == null) {
+                  return const Text('Reading log details...');
+                }
+                final size = info.bytes < 1024
+                    ? '${info.bytes} bytes'
+                    : '${(info.bytes / 1024).toStringAsFixed(1)} KB';
+                final updated = info.lastUpdated;
+                final updatedText = updated == null
+                    ? 'No entries yet'
+                    : 'Last updated ${_formatDiagnosticTime(context, updated)}';
+                return Text('$size • $updatedText');
+              },
+            ),
+            if (_isBusy) ...[
+              const SizedBox(height: 12),
+              const LinearProgressIndicator(),
+            ],
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: _isBusy ? null : _runCheck,
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('Run check now'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _isBusy ? null : _shareLog,
+                  icon: const Icon(Icons.ios_share_outlined),
+                  label: const Text('Share log'),
+                ),
+                TextButton.icon(
+                  onPressed: _isBusy ? null : _clearLog,
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Clear'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDiagnosticTime(BuildContext context, DateTime dateTime) {
+    return MaterialLocalizations.of(context)
+        .formatTimeOfDay(TimeOfDay.fromDateTime(dateTime.toLocal()));
+  }
+
+  Future<void> _runCheck() async {
+    setState(() => _isBusy = true);
+    try {
+      final succeeded = await ref
+          .read(backgroundTrackingControllerProvider.notifier)
+          .runDiagnosticCheck();
+      if (!mounted) return;
+      final message = succeeded
+          ? 'Test completed. Check Today, then share the log if needed.'
+          : 'Test failed. Share the log to see where it stopped.';
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      await DiagnosticLogService.record(
+        'diagnostics',
+        'Manual test UI failed',
+        error: error,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Test failed. Please share the log.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+          _info = DiagnosticLogService.getInfo();
+        });
+      }
+    }
+  }
+
+  Future<void> _shareLog() async {
+    setState(() => _isBusy = true);
+    try {
+      final logFile = await DiagnosticLogService.createShareCopy();
+      if (!mounted) return;
+      final renderBox = context.findRenderObject() as RenderBox?;
+      await SharePlus.instance.share(
+        ShareParams(
+          subject: 'ChronoLoge diagnostic log',
+          text: 'Temporary background tracking diagnostic log.',
+          files: [XFile(logFile.path, mimeType: 'text/plain')],
+          fileNameOverrides: const ['chronologe-diagnostics.log'],
+          sharePositionOrigin: renderBox == null
+              ? null
+              : renderBox.localToGlobal(Offset.zero) & renderBox.size,
+        ),
+      );
+    } catch (error) {
+      await DiagnosticLogService.record(
+        'diagnostics',
+        'Could not open the share sheet',
+        error: error,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not share the diagnostic log.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+          _info = DiagnosticLogService.getInfo();
+        });
+      }
+    }
+  }
+
+  Future<void> _clearLog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear diagnostic log?'),
+        content: const Text(
+          'Clear it before a fresh background test so the next log is easier '
+          'to read.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isBusy = true);
+    await DiagnosticLogService.clear();
+    if (!mounted) return;
+    setState(() {
+      _isBusy = false;
+      _info = DiagnosticLogService.getInfo();
+    });
   }
 }
 

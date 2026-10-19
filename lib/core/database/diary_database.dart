@@ -127,6 +127,21 @@ class DiaryDatabase {
     });
   }
 
+  // Checks whether a particular automatic event was already saved today.
+  Future<bool> hasTimelineEvent(String date, String eventType) async {
+    final database = await _appDatabase.database;
+    final rows = await database.query(
+      DiaryTimelineItemsTable.name,
+      columns: [DiaryTimelineItemsTable.id],
+      where:
+          '${DiaryTimelineItemsTable.entryDate} = ? AND '
+          '${DiaryTimelineItemsTable.eventType} = ?',
+      whereArgs: [date, eventType],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
   // Adds an imported event once, or refreshes it when the same source is seen again.
   Future<int> saveImportedTimelineItem(
     String date, {

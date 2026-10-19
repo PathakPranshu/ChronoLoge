@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/themes/theme.dart';
+import 'core/services/diagnostic_log_service.dart';
+import 'core/services/hourly_background_worker.dart';
 import 'features/authentication/views/authentication_gate.dart';
 import 'features/notifications/viewmodels/notification_view_model.dart';
 import 'features/settings/models/app_settings.dart';
@@ -12,7 +16,30 @@ import 'firebase_options.dart';
 // The app starts here: initialize Flutter/Firebase, then create Riverpod.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await DiagnosticLogService.record(
+    'app',
+    'App process started; platform=${Platform.operatingSystem}',
+  );
+  if (Platform.isAndroid || Platform.isIOS) {
+    try {
+      await initializeHourlyBackgroundWorker();
+    } catch (_) {
+      // The foreground app remains usable and the failure is in diagnostics.
+    }
+  }
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    await DiagnosticLogService.record('app', 'Firebase initialized');
+  } catch (error) {
+    await DiagnosticLogService.record(
+      'app',
+      'Firebase initialization failed',
+      error: error,
+    );
+    rethrow;
+  }
   runApp(const ProviderScope(child: MainApp()));
 }
 

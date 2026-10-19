@@ -10,6 +10,7 @@ import '../database/settings_database.dart';
 import '../database/tracking_database.dart';
 import '../utils/display_helpers.dart';
 import '../notifications/notification_service.dart';
+import 'diagnostic_log_service.dart';
 import 'open_meteo_weather_service.dart';
 
 enum BackgroundTrackingStatus {
@@ -19,6 +20,7 @@ enum BackgroundTrackingStatus {
   unsupported,
   locationServicesDisabled,
   permissionDenied,
+  backgroundPermissionNeeded,
   permissionDeniedForever,
   error,
 }
@@ -34,6 +36,8 @@ extension BackgroundTrackingStatusLabel on BackgroundTrackingStatus {
       'Turn on device location services',
     BackgroundTrackingStatus.permissionDenied =>
       'Location permission is required',
+    BackgroundTrackingStatus.backgroundPermissionNeeded =>
+      'Choose Allow all the time for background tracking',
     BackgroundTrackingStatus.permissionDeniedForever =>
       'Allow location access in system settings',
     BackgroundTrackingStatus.error => 'Location tracking needs attention',
@@ -59,7 +63,10 @@ class BackgroundLocationService {
   static const _maximumUsefulAccuracyMetres = 180.0;
   static const _minimumStayDuration = Duration(minutes: 5);
   static const _defaultWeatherRefresh = Duration(hours: 1);
+  static const _weatherRetryDelay = Duration(minutes: 10);
+  static const _weatherLocationChangeMetres = 1000.0;
   static const _defaultRetentionDays = 14;
+  static const _dailyBaselineEvent = 'day_baseline';
 
   final TrackingDatabase _trackingDatabase;
   final DiaryDatabase _diaryDatabase;
@@ -70,6 +77,7 @@ class BackgroundLocationService {
   StreamSubscription<Position>? _positionSubscription;
   StreamSubscription<ServiceStatus>? _serviceStatusSubscription;
   Timer? _candidateTimer;
+  Timer? _weatherTimer;
   Future<void> _processing = Future.value();
   TrackingRow? _activeVisit;
   TrackingRow? _activeTrip;
@@ -78,6 +86,7 @@ class BackgroundLocationService {
   _StayCandidate? _candidate;
   int _outsideVisitSamples = 0;
   DateTime? _lastCleanupAt;
+  DateTime? _lastWeatherFailureAt;
   Duration _weatherRefresh = _defaultWeatherRefresh;
   int _retentionDays = _defaultRetentionDays;
 
@@ -87,28 +96,55 @@ class BackgroundLocationService {
 
   // Starts continuous location updates after checking services and permission.
   Future<BackgroundTrackingStatus> start() async {
+    await DiagnosticLogService.record(
+      'tracking',
+      'Foreground tracker start requested',
+    );
     if (_positionSubscription != null) {
+      await DiagnosticLogService.record(
+        'tracking',
+        'Tracker was already active',
+      );
       return _emit(BackgroundTrackingStatus.active);
     }
     if (!Platform.isAndroid && !Platform.isIOS) {
+      await DiagnosticLogService.record('tracking', 'Unsupported platform');
       return _emit(BackgroundTrackingStatus.unsupported);
     }
 
     _emit(BackgroundTrackingStatus.starting);
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
+        await DiagnosticLogService.record(
+          'tracking',
+          'Start blocked because device location services are off',
+        );
         return _emit(BackgroundTrackingStatus.locationServicesDisabled);
       }
 
       var permission = await Geolocator.checkPermission();
+      await DiagnosticLogService.record(
+        'tracking',
+        'Initial location permission=$permission',
+      );
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
+        await DiagnosticLogService.record(
+          'tracking',
+          'Permission after request=$permission',
+        );
       }
       if (permission == LocationPermission.denied) {
         return _emit(BackgroundTrackingStatus.permissionDenied);
       }
       if (permission == LocationPermission.deniedForever) {
         return _emit(BackgroundTrackingStatus.permissionDeniedForever);
+      }
+      if (permission == LocationPermission.whileInUse) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission != LocationPermission.always) {
+        return _emit(BackgroundTrackingStatus.backgroundPermissionNeeded);
       }
 
       await _loadConfiguration();
@@ -119,7 +155,16 @@ class BackgroundLocationService {
           Geolocator.getPositionStream(locationSettings: _locationSettings)
               .listen(
                 _queuePosition,
-                onError: (_) => _emit(BackgroundTrackingStatus.error),
+                onError: (Object error) {
+                  unawaited(
+                    DiagnosticLogService.record(
+                      'tracking',
+                      'Location stream reported an error',
+                      error: error,
+                    ),
+                  );
+                  _emit(BackgroundTrackingStatus.error);
+                },
                 cancelOnError: false,
               );
       _serviceStatusSubscription = Geolocator.getServiceStatusStream().listen(
@@ -129,8 +174,18 @@ class BackgroundLocationService {
               : BackgroundTrackingStatus.locationServicesDisabled,
         ),
       );
+      unawaited(checkWeatherNow());
+      await DiagnosticLogService.record(
+        'tracking',
+        'Foreground location stream started',
+      );
       return _emit(BackgroundTrackingStatus.active);
-    } catch (_) {
+    } catch (error) {
+      await DiagnosticLogService.record(
+        'tracking',
+        'Foreground tracker failed to start',
+        error: error,
+      );
       await stop();
       return _emit(BackgroundTrackingStatus.error);
     }
@@ -138,14 +193,125 @@ class BackgroundLocationService {
 
   // Stops location collection while leaving persisted visit state recoverable.
   Future<void> stop() async {
+    await DiagnosticLogService.record(
+      'tracking',
+      'Stopping foreground tracker',
+    );
     _candidateTimer?.cancel();
     _candidateTimer = null;
+    _weatherTimer?.cancel();
+    _weatherTimer = null;
     _candidate = null;
     await _positionSubscription?.cancel();
     _positionSubscription = null;
     await _serviceStatusSubscription?.cancel();
     _serviceStatusSubscription = null;
     _emit(BackgroundTrackingStatus.disabled);
+  }
+
+  // Checks weather now and keeps it serialized with incoming location work.
+  Future<void> checkWeatherNow() {
+    if (_positionSubscription == null) {
+      return DiagnosticLogService.record(
+        'weather',
+        'Foreground weather check skipped because tracker is not active',
+      );
+    }
+    unawaited(
+      DiagnosticLogService.record('weather', 'Foreground weather check queued'),
+    );
+    _processing = _processing
+        .then((_) async {
+          await _refreshWeatherAtCurrentLocation();
+        })
+        .catchError((Object error, StackTrace _) {
+          _lastWeatherFailureAt = DateTime.now().toUtc();
+          unawaited(
+            DiagnosticLogService.record(
+              'weather',
+              'Foreground weather check failed',
+              error: error,
+            ),
+          );
+        });
+    return _processing.whenComplete(_scheduleNextWeatherCheck);
+  }
+
+  // Performs one self-contained check from an OS background worker.
+  Future<bool> runScheduledCheck({bool ignoreHourlyLimit = false}) async {
+    await DiagnosticLogService.record(
+      'weather',
+      'Scheduled check started; manualTest=$ignoreHourlyLimit',
+    );
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      await DiagnosticLogService.record(
+        'weather',
+        'Skipped on unsupported platform',
+      );
+      return true;
+    }
+    final trackingSetting = await _settingsDatabase.getSetting(
+      'automatic_tracking_enabled',
+    );
+    if (trackingSetting == 'false') {
+      await DiagnosticLogService.record(
+        'weather',
+        'Skipped because automatic tracking setting is off',
+      );
+      return true;
+    }
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      await DiagnosticLogService.record(
+        'weather',
+        'Failed because device location services are off',
+      );
+      return false;
+    }
+    final permission = await Geolocator.checkPermission();
+    if (permission != LocationPermission.always) {
+      await DiagnosticLogService.record(
+        'weather',
+        'Skipped because background location permission=$permission',
+      );
+      return true;
+    }
+
+    try {
+      await _loadConfiguration();
+      await _restoreState();
+      final dateKey = formatDateKey(DateTime.now());
+      final hasBaseline = await _diaryDatabase.hasTimelineEvent(
+        dateKey,
+        _dailyBaselineEvent,
+      );
+      final lastReadingAt = DateTime.tryParse(
+        _lastWeather?[WeatherSnapshotsTable.retrievedAt] as String? ?? '',
+      );
+      if (!ignoreHourlyLimit &&
+          hasBaseline &&
+          lastReadingAt != null &&
+          DateTime.now().toUtc().difference(lastReadingAt).abs() <
+              _weatherRefresh) {
+        final ageMinutes = DateTime.now()
+            .toUtc()
+            .difference(lastReadingAt)
+            .abs()
+            .inMinutes;
+        await DiagnosticLogService.record(
+          'weather',
+          'Skipped because last reading is only ${ageMinutes}m old',
+        );
+        return true;
+      }
+      return await _refreshWeatherAtCurrentLocation(force: ignoreHourlyLimit);
+    } catch (error) {
+      await DiagnosticLogService.record(
+        'weather',
+        'Scheduled check failed',
+        error: error,
+      );
+      return false;
+    }
   }
 
   // Opens the operating-system page where location access can be corrected.
@@ -189,7 +355,12 @@ class BackgroundLocationService {
     ]);
     _retentionDays = int.tryParse(values[0] ?? '') ?? _defaultRetentionDays;
     final weatherMinutes = int.tryParse(values[1] ?? '') ?? 60;
-    _weatherRefresh = Duration(minutes: weatherMinutes.clamp(15, 360));
+    // Never let an old setting make automatic collection less than hourly.
+    _weatherRefresh = Duration(minutes: weatherMinutes.clamp(15, 60));
+    await DiagnosticLogService.record(
+      'tracking',
+      'Configuration loaded; weather interval=${_weatherRefresh.inMinutes}m',
+    );
   }
 
   Future<void> _restoreState() async {
@@ -245,6 +416,7 @@ class BackgroundLocationService {
       return;
     }
 
+    await _recordWeatherIfDue(point);
     await _recordTripSegment(point);
     if (_activeVisit != null) {
       await _processActiveVisit(point);
@@ -291,7 +463,6 @@ class BackgroundLocationService {
     );
     if (distance <= _departureRadiusMetres) {
       _outsideVisitSamples = 0;
-      await _recordWeatherIfDue(point);
       return;
     }
 
@@ -556,27 +727,163 @@ class BackgroundLocationService {
     return nearest;
   }
 
-  Future<void> _recordWeatherIfDue(
+  // Schedules the next hourly check, midnight baseline, or network retry.
+  void _scheduleNextWeatherCheck() {
+    _weatherTimer?.cancel();
+    if (_positionSubscription == null) return;
+
+    final now = DateTime.now();
+    Duration delay;
+    final failedAt = _lastWeatherFailureAt;
+    if (failedAt != null) {
+      final elapsed = now.toUtc().difference(failedAt).abs();
+      final remaining = _weatherRetryDelay - elapsed;
+      delay = remaining > Duration.zero
+          ? remaining
+          : const Duration(seconds: 1);
+    } else {
+      final retrievedAtText =
+          _lastWeather?[WeatherSnapshotsTable.retrievedAt] as String?;
+      final retrievedAt = DateTime.tryParse(retrievedAtText ?? '');
+      if (retrievedAt == null) {
+        delay = _weatherRetryDelay;
+      } else {
+        final elapsed = now.toUtc().difference(retrievedAt).abs();
+        final remaining = _weatherRefresh - elapsed;
+        delay = remaining > Duration.zero
+            ? remaining
+            : const Duration(seconds: 1);
+      }
+    }
+
+    final nextMidnight = DateTime(
+      now.year,
+      now.month,
+      now.day + 1,
+    ).add(const Duration(seconds: 2));
+    final untilMidnight = nextMidnight.difference(now);
+    if (untilMidnight < delay) delay = untilMidnight;
+
+    unawaited(
+      DiagnosticLogService.record(
+        'scheduler',
+        'Foreground weather timer scheduled in ${delay.inMinutes}m',
+      ),
+    );
+
+    _weatherTimer = Timer(delay, () {
+      unawaited(checkWeatherNow());
+    });
+  }
+
+  // Gets a fresh coordinate for periodic and foreground-resume checks.
+  Future<bool> _refreshWeatherAtCurrentLocation({bool force = false}) async {
+    await DiagnosticLogService.record(
+      'weather',
+      'Requesting a current location fix',
+    );
+    final position = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.medium,
+        timeLimit: Duration(seconds: 20),
+      ),
+    );
+    await DiagnosticLogService.record(
+      'weather',
+      'Location fix received; accuracy=${position.accuracy.round()}m',
+    );
+    if (position.accuracy > _maximumUsefulAccuracyMetres) {
+      _lastWeatherFailureAt = DateTime.now().toUtc();
+      await DiagnosticLogService.record(
+        'weather',
+        'Location rejected because accuracy exceeded '
+            '${_maximumUsefulAccuracyMetres.round()}m',
+      );
+      return false;
+    }
+    return _recordWeatherIfDue(
+      _LocationPoint(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        recordedAt: DateTime.now().toUtc(),
+      ),
+      force: force,
+    );
+  }
+
+  Future<bool> _recordWeatherIfDue(
     _LocationPoint point, {
     bool force = false,
   }) async {
+    final dateKey = formatDateKey(DateTime.now());
+    final needsDailyBaseline = !await _diaryDatabase.hasTimelineEvent(
+      dateKey,
+      _dailyBaselineEvent,
+    );
+    final failedAt = _lastWeatherFailureAt;
+    if (!force &&
+        failedAt != null &&
+        DateTime.now().toUtc().difference(failedAt).abs() <
+            _weatherRetryDelay) {
+      final retryIn =
+          _weatherRetryDelay -
+          DateTime.now().toUtc().difference(failedAt).abs();
+      await DiagnosticLogService.record(
+        'weather',
+        'Skipped during retry cooldown; retry in ${retryIn.inMinutes}m',
+      );
+      return true;
+    }
     final previous = _lastWeather;
-    if (!force && previous != null) {
+    if (!force &&
+        !needsDailyBaseline &&
+        _lastWeatherFailureAt == null &&
+        previous != null) {
       final retrievedAt = DateTime.tryParse(
         previous[WeatherSnapshotsTable.retrievedAt]! as String,
       );
-      if (retrievedAt != null &&
-          point.recordedAt.difference(retrievedAt).abs() < _weatherRefresh) {
-        return;
+      final refreshIsDue =
+          retrievedAt == null ||
+          DateTime.now().toUtc().difference(retrievedAt).abs() >=
+              _weatherRefresh;
+      final previousLatitude = previous[WeatherSnapshotsTable.latitude] as num?;
+      final previousLongitude =
+          previous[WeatherSnapshotsTable.longitude] as num?;
+      final locationChanged =
+          previousLatitude != null &&
+          previousLongitude != null &&
+          Geolocator.distanceBetween(
+                previousLatitude.toDouble(),
+                previousLongitude.toDouble(),
+                point.latitude,
+                point.longitude,
+              ) >=
+              _weatherLocationChangeMetres;
+      if (!refreshIsDue && !locationChanged) {
+        await DiagnosticLogService.record(
+          'weather',
+          'No reading needed yet; no large location change detected',
+        );
+        return true;
       }
     }
 
     try {
+      await DiagnosticLogService.record(
+        'weather',
+        'Calling Open-Meteo; dailyBaseline=$needsDailyBaseline, forced=$force',
+      );
       final weather = await _weatherService.loadCurrent(
         latitude: point.latitude,
         longitude: point.longitude,
       );
       final retrievedAt = DateTime.now().toUtc();
+      _lastWeatherFailureAt = null;
+      await DiagnosticLogService.record(
+        'weather',
+        'Open-Meteo returned ${weather.condition}, '
+            '${weather.temperature.round()}C, code=${weather.weatherCode}',
+      );
       final weatherId = await _trackingDatabase.addWeatherSnapshot(
         observedAt: retrievedAt,
         retrievedAt: retrievedAt,
@@ -590,53 +897,107 @@ class BackgroundLocationService {
         weatherCode: weather.weatherCode,
         weatherLabel: '${weather.condition}, ${weather.temperature.round()}°C',
       );
-      final changed =
-          previous == null ||
-          previous[WeatherSnapshotsTable.weatherCode] != weather.weatherCode ||
-          ((previous[WeatherSnapshotsTable.temperatureCelsius]! as num)
-                          .toDouble() -
-                      weather.temperature)
-                  .abs() >=
-              3;
+      final oldTemperature =
+          (previous?[WeatherSnapshotsTable.temperatureCelsius] as num?)
+              ?.toDouble();
+      final oldWeatherCode =
+          (previous?[WeatherSnapshotsTable.weatherCode] as num?)?.round();
+      final temperatureChanged =
+          oldTemperature != null &&
+          oldTemperature.round() != weather.temperature.round();
+      final conditionChanged =
+          oldWeatherCode != null &&
+          OpenMeteoWeatherService.weatherLabel(oldWeatherCode) !=
+              weather.condition;
       _lastWeather = {
         WeatherSnapshotsTable.id: weatherId,
         WeatherSnapshotsTable.retrievedAt: retrievedAt.toIso8601String(),
+        WeatherSnapshotsTable.latitude: point.latitude,
+        WeatherSnapshotsTable.longitude: point.longitude,
         WeatherSnapshotsTable.temperatureCelsius: weather.temperature,
         WeatherSnapshotsTable.weatherCode: weather.weatherCode,
       };
-      if (!changed) return;
 
       final visit = _activeVisit;
       final placeId = visit?[VisitsTable.placeId] as int?;
       final place = placeId == null
           ? null
           : await _trackingDatabase.getPlace(placeId);
-      final locationLabel = place == null
-          ? await _locationName(point.latitude, point.longitude)
-          : _placeLabel(place);
+      var locationLabel = _placeLabel(place);
+      if (place == null || locationLabel == 'this place') {
+        locationLabel = await _locationName(point.latitude, point.longitude);
+      }
       final locationSnapshotId = await _trackingDatabase.addLocationSnapshot(
         recordedAt: retrievedAt,
         latitude: point.latitude,
         longitude: point.longitude,
         locationLabel: locationLabel,
       );
+      final weatherChanged =
+          (temperatureChanged || conditionChanged) &&
+          oldTemperature != null &&
+          oldWeatherCode != null;
+      final eventType = needsDailyBaseline
+          ? _dailyBaselineEvent
+          : weatherChanged
+          ? 'weather'
+          : 'hourly_checkin';
+      final textData = needsDailyBaseline
+          ? 'Started tracking today'
+          : weatherChanged
+          ? _weatherChangeText(
+              oldTemperature: oldTemperature,
+              oldWeatherCode: oldWeatherCode,
+              newTemperature: weather.temperature,
+              newWeatherCode: weather.weatherCode,
+            )
+          : 'Hourly check-in';
       await _diaryDatabase.addTimelineItem(
-        formatDateKey(retrievedAt.toLocal()),
+        dateKey,
         occurredAt: retrievedAt,
-        textData:
-            'Weather: ${weather.condition}, ${weather.temperature.round()}°C',
+        textData: textData,
         mood: '',
         source: 'automatic',
-        eventType: 'weather',
+        eventType: eventType,
         locationSnapshotId: locationSnapshotId,
         placeId: placeId,
         visitId: visit?[VisitsTable.id] as int?,
         weatherSnapshotId: weatherId,
       );
+      await DiagnosticLogService.record(
+        'database',
+        'Timeline item saved; date=$dateKey, eventType=$eventType',
+      );
       onTimelineChanged?.call();
-    } catch (_) {
-      // Weather failure must not interrupt location tracking.
+      return true;
+    } catch (error) {
+      _lastWeatherFailureAt = DateTime.now().toUtc();
+      await DiagnosticLogService.record(
+        'weather',
+        'Weather fetch or timeline save failed',
+        error: error,
+      );
+      _scheduleNextWeatherCheck();
+      return false;
     }
+  }
+
+  // Builds a short sentence from the previous and current weather readings.
+  String _weatherChangeText({
+    required double oldTemperature,
+    required int oldWeatherCode,
+    required double newTemperature,
+    required int newWeatherCode,
+  }) {
+    final oldRounded = oldTemperature.round();
+    final newRounded = newTemperature.round();
+    if (oldRounded != newRounded) {
+      return 'Weather changed from $oldRounded°C to $newRounded°C';
+    }
+
+    final oldCondition = OpenMeteoWeatherService.weatherLabel(oldWeatherCode);
+    final newCondition = OpenMeteoWeatherService.weatherLabel(newWeatherCode);
+    return 'Weather changed from $oldCondition to $newCondition';
   }
 
   Future<void> _cleanOldSamples(DateTime now) async {
@@ -659,13 +1020,16 @@ class BackgroundLocationService {
       );
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
-        for (final value in [
-          place.name,
-          place.street,
-          place.subLocality,
-          place.locality,
-        ]) {
-          if (value != null && value.trim().isNotEmpty) return value.trim();
+        final areaParts = <String>{
+          if (place.subLocality?.trim().isNotEmpty == true)
+            place.subLocality!.trim(),
+          if (place.locality?.trim().isNotEmpty == true) place.locality!.trim(),
+        };
+        if (areaParts.isNotEmpty) return areaParts.join(', ');
+
+        for (final value in [place.street, place.name]) {
+          final label = value?.trim() ?? '';
+          if (label.isNotEmpty && !_looksLikeHouseNumber(label)) return label;
         }
       }
     } catch (_) {
@@ -676,8 +1040,16 @@ class BackgroundLocationService {
 
   String _placeLabel(TrackingRow? place) {
     final name = place?[PlacesTable.nameColumn] as String?;
-    if (name != null && name.trim().isNotEmpty) return name.trim();
+    if (name != null &&
+        name.trim().isNotEmpty &&
+        !_looksLikeHouseNumber(name.trim())) {
+      return name.trim();
+    }
     return 'this place';
+  }
+
+  bool _looksLikeHouseNumber(String label) {
+    return RegExp(r'^\d+[A-Za-z]?$').hasMatch(label);
   }
 
   String _activityForSpeed(double speedMetresSecond) {
@@ -697,6 +1069,9 @@ class BackgroundLocationService {
   BackgroundTrackingStatus _emit(BackgroundTrackingStatus status) {
     if (currentStatus == status) return status;
     currentStatus = status;
+    unawaited(
+      DiagnosticLogService.record('tracking', 'Status changed to $status'),
+    );
     onStatusChanged?.call(status);
     return status;
   }

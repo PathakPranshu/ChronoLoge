@@ -11,6 +11,7 @@ import '../../search/views/search_page.dart';
 import '../../settings/viewmodels/settings_view_model.dart';
 import '../../settings/views/settings_page.dart';
 import '../../today/views/today_page.dart';
+import '../../tracking/viewmodels/background_tracking_controller.dart';
 
 /// Holds the main pages and switches them with the bottom navigation bar.
 class AppShell extends ConsumerStatefulWidget {
@@ -35,7 +36,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   void initState() {
     super.initState();
-    _lifecycleListener = AppLifecycleListener(onResume: _syncHealth);
+    _lifecycleListener = AppLifecycleListener(onResume: _handleResume);
     _notificationSubscription = NotificationService.instance.payloads.listen(
       _handleNotificationPayload,
     );
@@ -87,6 +88,14 @@ class _AppShellState extends ConsumerState<AppShell> {
           ),
         ],
       ),
+    );
+  }
+
+  // Catches up integrations that may have been paused by the operating system.
+  void _handleResume() {
+    _syncHealth();
+    unawaited(
+      ref.read(backgroundTrackingControllerProvider.notifier).checkWeatherNow(),
     );
   }
 

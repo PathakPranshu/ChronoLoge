@@ -436,6 +436,7 @@ class _TodayContent extends StatelessWidget {
             timeFormat: timeFormat,
             currentLocation: today.locationLabel,
             currentWeather: today.weatherLabel,
+            currentStaySince: today.currentStaySince,
             latitude: today.latitude,
             longitude: today.longitude,
             onItemTap: onEditSnippet,
@@ -567,6 +568,7 @@ class _TimelineMapSection extends StatefulWidget {
     required this.timeFormat,
     required this.currentLocation,
     required this.currentWeather,
+    required this.currentStaySince,
     required this.latitude,
     required this.longitude,
     required this.onItemTap,
@@ -577,6 +579,7 @@ class _TimelineMapSection extends StatefulWidget {
   final TimeFormat timeFormat;
   final String currentLocation;
   final String currentWeather;
+  final DateTime? currentStaySince;
   final double? latitude;
   final double? longitude;
   final ValueChanged<TimelineItem> onItemTap;
@@ -636,6 +639,7 @@ class _TimelineMapSectionState extends State<_TimelineMapSection>
                   timeFormat: widget.timeFormat,
                   currentLocation: widget.currentLocation,
                   currentWeather: widget.currentWeather,
+                  currentStaySince: widget.currentStaySince,
                   onItemTap: widget.onItemTap,
                   onItemDelete: widget.onItemDelete,
                 )
@@ -816,6 +820,7 @@ class _TimelineSection extends StatelessWidget {
     required this.timeFormat,
     required this.currentLocation,
     required this.currentWeather,
+    required this.currentStaySince,
     required this.onItemTap,
     required this.onItemDelete,
   });
@@ -824,11 +829,13 @@ class _TimelineSection extends StatelessWidget {
   final TimeFormat timeFormat;
   final String currentLocation;
   final String currentWeather;
+  final DateTime? currentStaySince;
   final ValueChanged<TimelineItem> onItemTap;
   final ValueChanged<TimelineItem> onItemDelete;
 
   @override
   Widget build(BuildContext context) {
+    final hasStayStatus = currentStaySince != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -844,11 +851,55 @@ class _TimelineSection extends StatelessWidget {
             _TimelineItemCard(
               item: items[index],
               timeFormat: timeFormat,
-              isLast: index == items.length - 1,
+              isLast: index == items.length - 1 && !hasStayStatus,
               onTap: () => onItemTap(items[index]),
               onDelete: () => onItemDelete(items[index]),
             ),
+        if (hasStayStatus)
+          _HereSinceStatus(since: currentStaySince!, timeFormat: timeFormat),
       ],
+    );
+  }
+}
+
+// Shows the beginning of the current stationary period below the latest event.
+class _HereSinceStatus extends StatelessWidget {
+  const _HereSinceStatus({required this.since, required this.timeFormat});
+
+  final DateTime since;
+  final TimeFormat timeFormat;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final localSince = since.toLocal();
+    final now = DateTime.now();
+    final isToday =
+        localSince.year == now.year &&
+        localSince.month == now.month &&
+        localSince.day == now.day;
+    final clock = formatClockTime(
+      localSince,
+      use24Hour: timeFormat == TimeFormat.hour24,
+    );
+    final label = isToday
+        ? clock
+        : '${MaterialLocalizations.of(context).formatMediumDate(localSince)}, '
+              '$clock';
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 86, bottom: 18),
+      child: Row(
+        children: [
+          Icon(Icons.schedule_rounded, size: 18, color: colors.primary),
+          const SizedBox(width: 8),
+          Text(
+            'Here since $label',
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: colors.onSurfaceVariant),
+          ),
+        ],
+      ),
     );
   }
 }

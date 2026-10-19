@@ -5,7 +5,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class DatabaseKeyProvider {
   DatabaseKeyProvider({FlutterSecureStorage? storage})
-    : _storage = storage ?? FlutterSecureStorage();
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock_this_device,
+            ),
+          );
 
   static const _storageKey = 'chronologe_database_key_v1';
   static const _keyLengthBytes = 32;
