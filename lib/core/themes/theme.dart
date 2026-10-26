@@ -1,18 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// Theme for complete application: colors and typography
+import 'font_controller.dart';
 
-// Color Schemas for light and dark mode theme
-
+// Theme for the complete application: colors and typography.
 class CustomTheme {
-
-  // Light Mode color schemas
-
+  // Light mode color scheme.
   static ThemeData lightThemeData(BuildContext context) {
     return ThemeData(
-      textTheme: buildTextTheme(),
-      colorScheme: ColorScheme(
+      textTheme: buildTextTheme(AppFont.geist),
+      colorScheme: const ColorScheme(
         brightness: Brightness.light,
         primary: Color(0xffa2391a),
         surfaceTint: Color(0xffa53b1c),
@@ -63,12 +60,11 @@ class CustomTheme {
     );
   }
 
-  // Dark Mode Color schema
-
+  // Dark mode color scheme.
   static ThemeData darkThemeData(BuildContext context) {
     return ThemeData(
-      textTheme: buildTextTheme(),
-      colorScheme: ColorScheme(
+      textTheme: buildTextTheme(AppFont.geist),
+      colorScheme: const ColorScheme(
         brightness: Brightness.dark,
         primary: Color(0xffffb5a0),
         surfaceTint: Color(0xffffb5a0),
@@ -119,39 +115,45 @@ class CustomTheme {
     );
   }
 
-  // Text Theme
-  static TextTheme buildTextTheme() {
+  // Text theme.
+  static TextTheme buildTextTheme(AppFont appFont) {
+    final mainFont = switch (appFont) {
+      AppFont.geist => GoogleFonts.geist(),
+      AppFont.roboto => GoogleFonts.roboto(),
+      AppFont.lato => GoogleFonts.lato(),
+    };
+
     return TextTheme(
-      displayMedium: TextStyle(
-        fontFamily: "Fraunces",
-        fontWeight: FontWeight(450),
+      displayMedium: const TextStyle(
+        fontFamily: 'Fraunces',
+        fontWeight: FontWeight.w500,
         fontVariations: [
           FontVariation.opticalSize(80),
           FontVariation('SOFT', 24),
-          FontVariation("WONK", 0),
+          FontVariation('WONK', 0),
         ],
       ),
-      displaySmall: TextStyle(
-        fontFamily: "Fraunces",
-        fontWeight: FontWeight(450),
+      displaySmall: const TextStyle(
+        fontFamily: 'Fraunces',
+        fontWeight: FontWeight.w500,
         fontVariations: [
           FontVariation.opticalSize(76),
           FontVariation('SOFT', 30),
-          FontVariation("WONK", 0),
+          FontVariation('WONK', 0),
         ],
       ),
-      headlineLarge: GoogleFonts.geist(),
-      headlineMedium: GoogleFonts.geist(),
-      headlineSmall: GoogleFonts.geist(),
-      titleLarge: GoogleFonts.geist(),
-      titleMedium: GoogleFonts.geist(),
-      titleSmall: GoogleFonts.geist(fontWeight: FontWeight.w500),
-      labelLarge: GoogleFonts.geist(),
-      labelMedium: GoogleFonts.geist(),
-      labelSmall: GoogleFonts.geist(),
-      bodyLarge: GoogleFonts.geist(),
-      bodyMedium: GoogleFonts.geist(),
-      bodySmall: GoogleFonts.geist(),
+      headlineLarge: mainFont,
+      headlineMedium: mainFont,
+      headlineSmall: mainFont,
+      titleLarge: mainFont,
+      titleMedium: mainFont,
+      titleSmall: mainFont.copyWith(fontWeight: FontWeight.w500),
+      labelLarge: mainFont,
+      labelMedium: mainFont,
+      labelSmall: mainFont,
+      bodyLarge: mainFont,
+      bodyMedium: mainFont,
+      bodySmall: mainFont,
     );
   }
 }

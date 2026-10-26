@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/themes/theme_controller.dart';
+import 'core/themes/font_controller.dart';
 import 'core/notifications/notification_service.dart';
 import 'core/notifications/notification_settings_controller.dart';
 import 'core/routing/router.dart';
@@ -26,12 +27,16 @@ class MainApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final goRouter = ref.watch(goRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final appFont = ref.watch(appFontProvider);
 
+    // Load the saved daily reminder preference.
     ref.watch(dailyRemindersEnabledProvider);
 
     return MaterialApp.router(
-      theme: CustomTheme.lightThemeData(context),
-      darkTheme: CustomTheme.darkThemeData(context),
+      theme: CustomTheme.lightThemeData(context)
+          .copyWith(textTheme: CustomTheme.buildTextTheme(appFont)),
+      darkTheme: CustomTheme.darkThemeData(context)
+          .copyWith(textTheme: CustomTheme.buildTextTheme(appFont)),
       themeMode: themeMode,
       routerConfig: goRouter,
     );

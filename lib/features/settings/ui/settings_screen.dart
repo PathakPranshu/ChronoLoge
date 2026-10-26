@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../authentication/shared/providers/auth_provider.dart';
 import '../../../core/themes/theme_controller.dart';
+import '../../../core/themes/font_controller.dart';
 import '../../../core/notifications/notification_settings_controller.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -87,7 +88,9 @@ class SettingsScreen extends ConsumerWidget {
             title: 'APP SETTINGS',
             onItemTap: (item) {
               if (item.title == 'Preferences') {
-                _showThemeSelector(context, ref);
+                _showThemeSelector(context);
+              } else if (item.title == 'Font') {
+                _showFontSelector(context);
               } else if (item.title == 'Notifications') {
                 _showNotificationSettings(context);
               } else {
@@ -99,6 +102,11 @@ class SettingsScreen extends ConsumerWidget {
                 icon: Icons.tune_rounded,
                 title: 'Preferences',
                 subtitle: 'Theme and diary appearance',
+              ),
+              _SettingsItem(
+                icon: Icons.font_download_outlined,
+                title: 'Font',
+                subtitle: 'Choose your app font',
               ),
               _SettingsItem(
                 icon: Icons.notifications_outlined,
@@ -159,7 +167,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showThemeSelector(BuildContext context, WidgetRef ref) {
+  void _showThemeSelector(BuildContext context) {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => Consumer(
@@ -225,6 +233,75 @@ class SettingsScreen extends ConsumerWidget {
           const SnackBar(
             content: Text('Could not save the appearance setting.'),
           ),
+        );
+      }
+    }
+  }
+
+  void _showFontSelector(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Consumer(
+        builder: (context, dialogRef, _) {
+          final selectedFont = dialogRef.watch(appFontProvider);
+
+          return AlertDialog(
+            title: const Text('App font'),
+            content: RadioGroup<AppFont>(
+              groupValue: selectedFont,
+              onChanged: (font) {
+                if (font != null) {
+                  _saveFont(dialogContext, dialogRef, font);
+                }
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  _FontOption(
+                    title: 'Geist',
+                    subtitle: 'ChronoLoge default font',
+                    value: AppFont.geist,
+                  ),
+                  _FontOption(
+                    title: 'Roboto',
+                    subtitle: 'Clean and familiar',
+                    value: AppFont.roboto,
+                  ),
+                  _FontOption(
+                    title: 'Lato',
+                    subtitle: 'Warm and readable',
+                    value: AppFont.lato,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _saveFont(
+    BuildContext context,
+    WidgetRef ref,
+    AppFont font,
+  ) async {
+    try {
+      await ref.read(appFontProvider.notifier).setFont(font);
+
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save the font setting.')),
         );
       }
     }
@@ -305,6 +382,28 @@ class _ThemeOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return RadioListTile<ThemeMode>(
+      contentPadding: EdgeInsets.zero,
+      title: Text(title),
+      subtitle: Text(subtitle),
+      value: value,
+    );
+  }
+}
+
+class _FontOption extends StatelessWidget {
+  const _FontOption({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+  });
+
+  final String title;
+  final String subtitle;
+  final AppFont value;
+
+  @override
+  Widget build(BuildContext context) {
+    return RadioListTile<AppFont>(
       contentPadding: EdgeInsets.zero,
       title: Text(title),
       subtitle: Text(subtitle),
