@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'core/routing/router_provider.dart';
 import 'features/authentication/shared/providers/auth_provider.dart';
+import 'core/routing/routes.dart';
 
 class DemoWelcome extends ConsumerWidget {
   const DemoWelcome({super.key});
@@ -22,6 +24,11 @@ class DemoWelcome extends ConsumerWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: () => context.push(Routes.settings),
+          ),
           IconButton(
             icon: Icon(Icons.logout, color: colorTheme.error),
             tooltip: 'Sign Out',

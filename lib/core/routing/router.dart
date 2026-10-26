@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../demo.dart';
+import '../../features/settings/ui/settings_screen.dart';
 import '../../features/authentication/shared/providers/auth_provider.dart';
 import '../../features/authentication/shared/providers/secure_storage_provider.dart';
 import '../../features/authentication/ui/login/login_screen.dart';
@@ -32,6 +33,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.unlock,
         builder: (context, state) => const UnlockScreen(),
+      ),
+      GoRoute(
+        path: Routes.settings,
+        builder: (context, state) => const SettingsScreen(),
       ),
       GoRoute(
         path: Routes.home,
@@ -73,7 +78,7 @@ Future<String?> _redirect(
 
     // Must unlock the app if the session is locked
     if (!isUnlocked) {
-      return unlocking? null: Routes.unlock;
+      return unlocking ? null : Routes.unlock;
     }
 
     if (isAuthRoute || settingPIN || unlocking) {
