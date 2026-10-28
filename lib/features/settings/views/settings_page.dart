@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/background_location_service.dart';
+import '../../../core/services/android_background_health_service.dart';
 import '../../../core/services/diagnostic_log_service.dart';
 import '../../authentication/viewmodels/authentication_view_model.dart';
 import '../../authentication/views/authentication_page.dart';
+import '../../entries/viewmodels/trash_view_model.dart';
+import '../../entries/views/trash_page.dart';
 import '../../integrations/health/viewmodels/health_integration_view_model.dart';
 import '../../notifications/viewmodels/notification_view_model.dart';
 import '../../tracking/viewmodels/background_tracking_controller.dart';
@@ -30,6 +33,7 @@ enum _SettingsSection {
   units,
   news,
   backups,
+  storage,
   diagnostics,
 }
 
@@ -329,6 +333,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               child: const _CloudBackupCard(),
             ),
             _CollapsibleSettingsSection(
+              title: 'Storage',
+              icon: Icons.storage_outlined,
+              isExpanded: _openSection == _SettingsSection.storage,
+              onTap: () => _toggleSection(_SettingsSection.storage),
+              child: Card(
+                child: ListTile(
+                  leading: const Icon(Icons.delete_outline_rounded),
+                  title: const Text('Trash'),
+                  subtitle: const Text('Deleted entries are kept for 30 days'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: _openTrash,
+                ),
+              ),
+            ),
+            _CollapsibleSettingsSection(
               title: 'Diagnostics',
               icon: Icons.bug_report_outlined,
               isExpanded: _openSection == _SettingsSection.diagnostics,
@@ -363,6 +382,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (context) => const AuthenticationPage()),
     );
+  }
+
+  void _openTrash() {
+    ref.invalidate(trashViewModelProvider);
+    Navigator.of(context)
+        .push<void>(MaterialPageRoute(builder: (context) => const TrashPage()));
   }
 
   Future<void> _changeDisplayName(String currentName) async {
@@ -457,12 +482,46 @@ class _CollapsibleSettingsSection extends StatelessWidget {
   }
 }
 
-// Keeps location-status updates from rebuilding the whole Settings page.
-class _BackgroundLocationCard extends ConsumerWidget {
+// Shows location status and Android's battery restriction state.
+class _BackgroundLocationCard extends ConsumerStatefulWidget {
   const _BackgroundLocationCard();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_BackgroundLocationCard> createState() =>
+      _BackgroundLocationCardState();
+}
+
+class _BackgroundLocationCardState
+    extends ConsumerState<_BackgroundLocationCard>
+    with WidgetsBindingObserver {
+  late Future<AndroidBackgroundHealth> _backgroundHealth;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _backgroundHealth = AndroidBackgroundHealthService.check();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      setState(() {
+        _backgroundHealth = AndroidBackgroundHealthService.check(
+          writeLog: true,
+        );
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final trackingEnabled = ref.watch(
       settingsViewModelProvider.select(
         (settings) => settings.value?.automaticTrackingEnabled ?? true,
@@ -484,6 +543,40 @@ class _BackgroundLocationCard extends ConsumerWidget {
             onChanged: (value) => ref
                 .read(settingsViewModelProvider.notifier)
                 .setAutomaticTrackingEnabled(value),
+          ),
+          FutureBuilder<AndroidBackgroundHealth>(
+            future: _backgroundHealth,
+            builder: (context, snapshot) {
+              final health = snapshot.data;
+              if (health == null || !health.isSupported) {
+                return const SizedBox.shrink();
+              }
+              return Column(
+                children: [
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: Icon(
+                      health.needsAttention
+                          ? Icons.battery_alert_outlined
+                          : Icons.battery_saver_outlined,
+                    ),
+                    title: const Text('Background battery access'),
+                    subtitle: Text(
+                      health.needsAttention
+                          ? '${health.label}. Open app settings, choose '
+                                'Battery, then select Unrestricted.'
+                          : health.label,
+                    ),
+                    trailing: health.needsAttention
+                        ? const Icon(Icons.chevron_right_rounded)
+                        : const Icon(Icons.check_circle_outline_rounded),
+                    onTap: health.needsAttention
+                        ? AndroidBackgroundHealthService.openAppBatterySettings
+                        : null,
+                  ),
+                ],
+              );
+            },
           ),
           if (trackingEnabled &&
               trackingStatus != BackgroundTrackingStatus.active &&
@@ -815,9 +908,11 @@ class _DiagnosticsCardState extends ConsumerState<_DiagnosticsCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Temporary log for background location and hourly weather. '
-              'It does not include exact coordinates, diary text, media paths, '
-              'passwords, or encryption keys.',
+              'Temporary log for the foreground location service, movement '
+              'changes, hourly backup worker, cached-location fallback, '
+              'weather, and Android battery restrictions. It does not include '
+              'exact coordinates, diary text, media paths, passwords, or '
+              'encryption keys.',
             ),
             const SizedBox(height: 10),
             FutureBuilder<DiagnosticLogInfo>(

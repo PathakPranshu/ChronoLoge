@@ -10,6 +10,7 @@ import '../database/settings_database.dart';
 import '../database/tracking_database.dart';
 import '../utils/display_helpers.dart';
 import '../notifications/notification_service.dart';
+import 'android_background_health_service.dart';
 import 'diagnostic_log_service.dart';
 import 'open_meteo_weather_service.dart';
 
@@ -65,6 +66,9 @@ class BackgroundLocationService {
   static const _defaultWeatherRefresh = Duration(hours: 1);
   static const _weatherRetryDelay = Duration(minutes: 10);
   static const _weatherLocationChangeMetres = 1000.0;
+  static const _weatherFallbackMaximumAge = Duration(hours: 24);
+  static const _weatherFallbackMaximumAccuracyMetres = 2000.0;
+  static const _locationHeartbeatInterval = Duration(minutes: 30);
   static const _defaultRetentionDays = 14;
   static const _dailyBaselineEvent = 'day_baseline';
 
@@ -87,6 +91,8 @@ class BackgroundLocationService {
   int _outsideVisitSamples = 0;
   DateTime? _lastCleanupAt;
   DateTime? _lastWeatherFailureAt;
+  DateTime? _lastLocationHeartbeatAt;
+  String? _lastActivity;
   Duration _weatherRefresh = _defaultWeatherRefresh;
   int _retentionDays = _defaultRetentionDays;
 
@@ -151,6 +157,10 @@ class BackgroundLocationService {
       await _restoreState();
       await _cleanOldSamples(DateTime.now().toUtc());
 
+      if (Platform.isAndroid) {
+        await AndroidBackgroundHealthService.check(writeLog: true);
+      }
+
       _positionSubscription =
           Geolocator.getPositionStream(locationSettings: _locationSettings)
               .listen(
@@ -177,7 +187,11 @@ class BackgroundLocationService {
       unawaited(checkWeatherNow());
       await DiagnosticLogService.record(
         'tracking',
-        'Foreground location stream started',
+        Platform.isAndroid
+            ? 'Movement-driven foreground location stream started; '
+                  'distanceFilter=75m, interval=2m, wakeLock=true'
+            : 'Adaptive iOS background location stream started; '
+                  'distanceFilter=75m, automaticPause=true',
       );
       return _emit(BackgroundTrackingStatus.active);
     } catch (error) {
@@ -327,22 +341,23 @@ class BackgroundLocationService {
     if (Platform.isAndroid) {
       return AndroidSettings(
         accuracy: LocationAccuracy.medium,
-        distanceFilter: 25,
-        intervalDuration: const Duration(minutes: 1),
+        distanceFilter: 75,
+        intervalDuration: const Duration(minutes: 2),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationTitle: 'ChronoLoge is remembering your day',
           notificationText:
               'Location is used privately to build your automatic diary.',
           notificationChannelName: 'Automatic diary location',
           setOngoing: true,
+          enableWakeLock: true,
         ),
       );
     }
     return AppleSettings(
       accuracy: LocationAccuracy.medium,
-      distanceFilter: 25,
+      distanceFilter: 75,
       activityType: ActivityType.other,
-      pauseLocationUpdatesAutomatically: false,
+      pauseLocationUpdatesAutomatically: true,
       showBackgroundLocationIndicator: true,
       allowBackgroundLocationUpdates: true,
     );
@@ -387,7 +402,14 @@ class BackgroundLocationService {
   void _queuePosition(Position position) {
     _processing = _processing
         .then((_) => _processPosition(position))
-        .catchError((Object _, StackTrace _) {
+        .catchError((Object error, StackTrace _) {
+          unawaited(
+            DiagnosticLogService.record(
+              'tracking',
+              'Processing a streamed location failed',
+              error: error,
+            ),
+          );
           _emit(BackgroundTrackingStatus.error);
         });
   }
@@ -400,6 +422,28 @@ class BackgroundLocationService {
       recordedAt: recordedAt,
     );
     final activity = _activityForSpeed(position.speed);
+    final previousPoint = _lastPoint;
+    final gapMinutes = previousPoint == null
+        ? null
+        : recordedAt.difference(previousPoint.recordedAt).abs().inMinutes;
+    final activityChanged = _lastActivity != activity;
+    final heartbeatIsDue =
+        _lastLocationHeartbeatAt == null ||
+        recordedAt.difference(_lastLocationHeartbeatAt!).abs() >=
+            _locationHeartbeatInterval;
+    if (activityChanged || heartbeatIsDue) {
+      await DiagnosticLogService.record(
+        'tracking',
+        activityChanged
+            ? 'Movement mode changed to $activity; '
+                  'accuracy=${position.accuracy.round()}m'
+            : 'Location stream heartbeat; activity=$activity, '
+                  'accuracy=${position.accuracy.round()}m, '
+                  'previousGap=${gapMinutes ?? 0}m',
+      );
+      _lastActivity = activity;
+      _lastLocationHeartbeatAt = recordedAt;
+    }
     await _trackingDatabase.addLocationSample(
       recordedAt: recordedAt,
       latitude: position.latitude,
@@ -776,39 +820,133 @@ class BackgroundLocationService {
     });
   }
 
-  // Gets a fresh coordinate for periodic and foreground-resume checks.
+  // Uses a fresh fix when possible, then falls back to a recent cached point.
   Future<bool> _refreshWeatherAtCurrentLocation({bool force = false}) async {
     await DiagnosticLogService.record(
       'weather',
       'Requesting a current location fix',
     );
-    final position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.medium,
-        timeLimit: Duration(seconds: 20),
-      ),
-    );
-    await DiagnosticLogService.record(
-      'weather',
-      'Location fix received; accuracy=${position.accuracy.round()}m',
-    );
-    if (position.accuracy > _maximumUsefulAccuracyMetres) {
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+      await DiagnosticLogService.record(
+        'weather',
+        'Fresh location fix received; accuracy=${position.accuracy.round()}m',
+      );
+      if (position.accuracy <= _weatherFallbackMaximumAccuracyMetres) {
+        return await _recordWeatherIfDue(
+          _LocationPoint(
+            latitude: position.latitude,
+            longitude: position.longitude,
+            recordedAt: position.timestamp.toUtc(),
+          ),
+          force: force,
+        );
+      }
+      await DiagnosticLogService.record(
+        'weather',
+        'Fresh fix was too inaccurate for weather; trying cached location',
+      );
+    } catch (error) {
+      await DiagnosticLogService.record(
+        'weather',
+        'Fresh location fix unavailable; trying cached location',
+        error: error,
+      );
+    }
+
+    final cachedPoint = await _cachedWeatherPoint();
+    if (cachedPoint == null) {
       _lastWeatherFailureAt = DateTime.now().toUtc();
       await DiagnosticLogService.record(
         'weather',
-        'Location rejected because accuracy exceeded '
-            '${_maximumUsefulAccuracyMetres.round()}m',
+        'Weather check failed because no recent cached location was available',
       );
       return false;
     }
-    return _recordWeatherIfDue(
-      _LocationPoint(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        recordedAt: DateTime.now().toUtc(),
-      ),
-      force: force,
+    return _recordWeatherIfDue(cachedPoint, force: force);
+  }
+
+  Future<_LocationPoint?> _cachedWeatherPoint() async {
+    try {
+      final systemPosition = await Geolocator.getLastKnownPosition();
+      if (systemPosition != null &&
+          _isUsableWeatherFallback(
+            recordedAt: systemPosition.timestamp,
+            accuracyMetres: systemPosition.accuracy,
+          )) {
+        final ageMinutes = DateTime.now()
+            .toUtc()
+            .difference(systemPosition.timestamp.toUtc())
+            .abs()
+            .inMinutes;
+        await DiagnosticLogService.record(
+          'weather',
+          'Using system cached location; age=${ageMinutes}m, '
+              'accuracy=${systemPosition.accuracy.round()}m',
+        );
+        return _LocationPoint(
+          latitude: systemPosition.latitude,
+          longitude: systemPosition.longitude,
+          recordedAt: systemPosition.timestamp.toUtc(),
+        );
+      }
+    } catch (error) {
+      await DiagnosticLogService.record(
+        'weather',
+        'System cached location could not be read',
+        error: error,
+      );
+    }
+
+    final sample = await _trackingDatabase.getLatestLocationSample();
+    if (sample == null) return null;
+    final recordedAt = DateTime.tryParse(
+      sample[LocationSamplesTable.recordedAt] as String? ?? '',
     );
+    final accuracy = (sample[LocationSamplesTable.accuracyMetres] as num?)
+        ?.toDouble();
+    if (recordedAt == null ||
+        accuracy == null ||
+        !_isUsableWeatherFallback(
+          recordedAt: recordedAt,
+          accuracyMetres: accuracy,
+        )) {
+      await DiagnosticLogService.record(
+        'weather',
+        'Newest database location was too old or inaccurate for fallback',
+      );
+      return null;
+    }
+
+    final ageMinutes = DateTime.now()
+        .toUtc()
+        .difference(recordedAt.toUtc())
+        .abs()
+        .inMinutes;
+    await DiagnosticLogService.record(
+      'weather',
+      'Using encrypted database location; age=${ageMinutes}m, '
+          'accuracy=${accuracy.round()}m',
+    );
+    return _LocationPoint(
+      latitude: (sample[LocationSamplesTable.latitude]! as num).toDouble(),
+      longitude: (sample[LocationSamplesTable.longitude]! as num).toDouble(),
+      recordedAt: recordedAt.toUtc(),
+    );
+  }
+
+  bool _isUsableWeatherFallback({
+    required DateTime recordedAt,
+    required double accuracyMetres,
+  }) {
+    final age = DateTime.now().toUtc().difference(recordedAt.toUtc()).abs();
+    return age <= _weatherFallbackMaximumAge &&
+        accuracyMetres <= _weatherFallbackMaximumAccuracyMetres;
   }
 
   Future<bool> _recordWeatherIfDue(

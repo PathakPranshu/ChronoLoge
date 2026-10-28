@@ -50,6 +50,17 @@ class TrackingDatabase {
     );
   }
 
+  // Returns the newest raw location for low-power weather fallback.
+  Future<TrackingRow?> getLatestLocationSample() async {
+    final database = await _appDatabase.database;
+    final rows = await database.query(
+      LocationSamplesTable.name,
+      orderBy: '${LocationSamplesTable.recordedAt} DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.single;
+  }
+
   // Removes raw samples older than the configured privacy retention period.
   Future<int> deleteLocationSamplesBefore(DateTime cutoff) async {
     final database = await _appDatabase.database;

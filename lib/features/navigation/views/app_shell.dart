@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/notifications/notification_service.dart';
 import '../../entries/viewmodels/entries_view_model.dart';
+import '../../entries/viewmodels/trash_view_model.dart';
 import '../../entries/views/entries_page.dart';
 import '../../integrations/health/viewmodels/health_integration_view_model.dart';
 import '../../search/views/search_page.dart';
@@ -56,6 +57,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   Widget build(BuildContext context) {
     ref.watch(healthIntegrationViewModelProvider.select((_) => 0));
+    ref.watch(trashMaintenanceProvider);
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: NavigationBar(
@@ -93,6 +95,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   // Catches up integrations that may have been paused by the operating system.
   void _handleResume() {
+    ref.invalidate(trashMaintenanceProvider);
     _syncHealth();
     unawaited(
       ref.read(backgroundTrackingControllerProvider.notifier).checkWeatherNow(),

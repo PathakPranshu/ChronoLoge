@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/display_helpers.dart';
+import '../../../core/widgets/confirmation_dialog.dart';
 import '../../../core/widgets/encrypted_media_image.dart';
 import '../../../core/widgets/voice_memo_player.dart';
 import '../../settings/models/app_settings.dart';
@@ -28,6 +29,13 @@ class DiaryViewPage extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleLarge
                 ?.copyWith(fontWeight: FontWeight.normal),
           ),
+          actions: [
+            IconButton(
+              tooltip: 'Move entry to Trash',
+              onPressed: () => _moveToTrash(context, ref),
+              icon: const Icon(Icons.delete_outline_rounded),
+            ),
+          ],
           bottom: const TabBar(
             tabs: [
               Tab(icon: Icon(Icons.timeline_rounded), text: 'Timeline'),
@@ -43,6 +51,29 @@ class DiaryViewPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _moveToTrash(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showConfirmationDialog(
+      context,
+      title: 'Move entry to Trash?',
+      message: 'You can restore this diary entry from Trash for 30 days.',
+      confirmLabel: 'Move to Trash',
+      icon: Icons.delete_outline_rounded,
+      isDestructive: true,
+    );
+    if (!confirmed || !context.mounted) return;
+
+    try {
+      await ref.read(diaryViewModelProvider(_dateKey).notifier).moveToTrash();
+      if (!context.mounted) return;
+      Navigator.pop(context, true);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not move this entry to Trash.')),
+      );
+    }
   }
 }
 

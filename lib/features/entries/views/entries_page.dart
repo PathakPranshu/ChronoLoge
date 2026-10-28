@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/diary_database.dart';
 import '../../../core/widgets/diary_entry_tile.dart';
 import '../viewmodels/entries_view_model.dart';
+import '../viewmodels/trash_view_model.dart';
 import 'diary_entry_page.dart';
 import 'diary_view_page.dart';
+import 'trash_page.dart';
 
 /// Lets the user find diary days using a calendar or newest-first list.
 class EntriesPage extends ConsumerWidget {
@@ -23,12 +25,20 @@ class EntriesPage extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Entries',
-                  style: Theme.of(context).textTheme.displaySmall,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Entries',
+                      style: Theme.of(context).textTheme.displaySmall,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Trash',
+                    onPressed: () => _openTrash(context, ref),
+                    icon: const Icon(Icons.delete_outline_rounded),
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
               const TabBar(
@@ -308,6 +318,14 @@ class _EntriesList extends ConsumerWidget {
       ),
     );
   }
+}
+
+Future<void> _openTrash(BuildContext context, WidgetRef ref) async {
+  ref.invalidate(trashViewModelProvider);
+  await Navigator.of(context)
+      .push<void>(MaterialPageRoute(builder: (context) => const TrashPage()));
+  if (!context.mounted) return;
+  await ref.read(entriesViewModelProvider.notifier).refresh();
 }
 
 Future<void> _openDiaryEntry(

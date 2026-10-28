@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
 import '../../../core/services/background_location_service.dart';
+import '../../../core/services/android_background_health_service.dart';
 import '../../../core/services/diagnostic_log_service.dart';
 import '../../../core/services/hourly_background_worker.dart';
 import '../../settings/viewmodels/settings_view_model.dart';
@@ -123,6 +124,7 @@ class BackgroundTrackingController
       'diagnostics',
       'Manual background-path test requested from Settings',
     );
+    await AndroidBackgroundHealthService.check(writeLog: true);
     final service = ref.read(backgroundLocationServiceProvider);
     final succeeded = await service.runScheduledCheck(ignoreHourlyLimit: true);
     if (succeeded) ref.invalidate(todayViewModelProvider);

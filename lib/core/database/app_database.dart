@@ -125,8 +125,14 @@ class AppDatabase {
         ${DiaryEntriesTable.textData} TEXT NOT NULL DEFAULT '',
         ${DiaryEntriesTable.mood} TEXT NOT NULL DEFAULT '',
         ${DiaryEntriesTable.createdAt} TEXT NOT NULL,
-        ${DiaryEntriesTable.updatedAt} TEXT NOT NULL
+        ${DiaryEntriesTable.updatedAt} TEXT NOT NULL,
+        ${DiaryEntriesTable.deletedAt} TEXT
       )
+    ''');
+
+    await database.execute('''
+      CREATE INDEX diary_entries_deleted_at_idx
+      ON ${DiaryEntriesTable.name} (${DiaryEntriesTable.deletedAt})
     ''');
 
     await _createSettingsTable(database);
@@ -142,29 +148,24 @@ class AppDatabase {
     int oldVersion,
     int newVersion,
   ) async {
-    await _resetSchema(database);
-  }
-
-  Future<void> _resetSchema(Database database) async {
-    const tables = [
-      'memory_prompts',
-      'diary_media',
-      'diary_timeline_items',
-      'location_snapshots',
-      'trips',
-      'visits',
-      'location_samples',
-      'weather_snapshots',
-      'places',
-      'diary_images',
-      'diary_voice_memos',
-      'settings',
-      'diary_entries',
-    ];
-    for (final table in tables) {
-      await database.execute('DROP TABLE IF EXISTS $table');
+    if (oldVersion < 10) {
+      final columns = await database.rawQuery(
+        'PRAGMA table_info(${DiaryEntriesTable.name})',
+      );
+      final hasDeletedAt = columns.any(
+        (column) => column['name'] == DiaryEntriesTable.deletedAt,
+      );
+      if (!hasDeletedAt) {
+        await database.execute(
+          'ALTER TABLE ${DiaryEntriesTable.name} '
+          'ADD COLUMN ${DiaryEntriesTable.deletedAt} TEXT',
+        );
+      }
+      await database.execute('''
+        CREATE INDEX IF NOT EXISTS diary_entries_deleted_at_idx
+        ON ${DiaryEntriesTable.name} (${DiaryEntriesTable.deletedAt})
+      ''');
     }
-    await _createSchema(database, DatabaseConstants.version);
   }
 
   Future<void> _createDiaryMediaTable(Database database) async {

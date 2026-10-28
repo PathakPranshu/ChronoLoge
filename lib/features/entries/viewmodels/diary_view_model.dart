@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/database_constants.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/services/media_encryption_provider.dart';
+import '../../search/viewmodels/search_view_model.dart';
+import 'entries_view_model.dart';
+import 'trash_view_model.dart';
 
 final diaryViewModelProvider = AsyncNotifierProvider.autoDispose
     .family<DiaryViewModel, DiaryViewState, String>(DiaryViewModel.new);
@@ -87,5 +90,13 @@ class DiaryViewModel extends AsyncNotifier<DiaryViewState> {
   Future<void> refresh() async {
     ref.invalidateSelf();
     await future;
+  }
+
+  // Hides this day from the diary until it is restored from Trash.
+  Future<void> moveToTrash() async {
+    await ref.read(diaryDatabaseProvider).deleteEntry(dateKey);
+    ref.invalidate(trashViewModelProvider);
+    ref.invalidate(entriesViewModelProvider);
+    ref.invalidate(searchViewModelProvider);
   }
 }

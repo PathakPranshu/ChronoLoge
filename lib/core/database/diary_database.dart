@@ -34,7 +34,9 @@ class DiaryDatabase {
     final database = await _appDatabase.database;
     final rows = await database.query(
       DiaryEntriesTable.name,
-      where: '${DiaryEntriesTable.date} = ?',
+      where:
+          '${DiaryEntriesTable.date} = ? AND '
+          '${DiaryEntriesTable.deletedAt} IS NULL',
       whereArgs: [date],
       limit: 1,
     );
@@ -74,6 +76,7 @@ class DiaryDatabase {
           DiaryEntriesTable.title: title,
           DiaryEntriesTable.textData: textData,
           DiaryEntriesTable.updatedAt: _timestamp(),
+          DiaryEntriesTable.deletedAt: null,
         },
         where: '${DiaryEntriesTable.date} = ?',
         whereArgs: [date],
@@ -332,7 +335,11 @@ class DiaryDatabase {
       await _ensureEntry(transaction, date);
       await transaction.update(
         DiaryEntriesTable.name,
-        {column: value, DiaryEntriesTable.updatedAt: _timestamp()},
+        {
+          column: value,
+          DiaryEntriesTable.updatedAt: _timestamp(),
+          DiaryEntriesTable.deletedAt: null,
+        },
         where: '${DiaryEntriesTable.date} = ?',
         whereArgs: [date],
       );
@@ -438,6 +445,7 @@ class DiaryDatabase {
     final database = await _appDatabase.database;
     final rows = await database.query(
       DiaryEntriesTable.name,
+      where: '${DiaryEntriesTable.deletedAt} IS NULL',
       orderBy: '${DiaryEntriesTable.date} DESC',
     );
     return _attachMedia(database, rows);
@@ -467,23 +475,25 @@ class DiaryDatabase {
       DiaryEntriesTable.name,
       where:
           '''
-        INSTR(LOWER(${DiaryEntriesTable.date}), LOWER(?)) > 0 OR
-        INSTR(LOWER(${DiaryEntriesTable.title}), LOWER(?)) > 0 OR
-        INSTR(LOWER(${DiaryEntriesTable.textData}), LOWER(?)) > 0 OR
-        INSTR(LOWER(${DiaryEntriesTable.mood}), LOWER(?)) > 0 OR
-        EXISTS (
-          SELECT 1
-          FROM ${DiaryTimelineItemsTable.name} timeline
-          WHERE timeline.${DiaryTimelineItemsTable.entryDate} =
-                ${DiaryEntriesTable.name}.${DiaryEntriesTable.date}
-            AND (
-              INSTR(
-                LOWER(timeline.${DiaryTimelineItemsTable.textData}), LOWER(?)
-              ) > 0 OR
-              INSTR(
-                LOWER(timeline.${DiaryTimelineItemsTable.mood}), LOWER(?)
-              ) > 0
-            )
+        ${DiaryEntriesTable.deletedAt} IS NULL AND (
+          INSTR(LOWER(${DiaryEntriesTable.date}), LOWER(?)) > 0 OR
+          INSTR(LOWER(${DiaryEntriesTable.title}), LOWER(?)) > 0 OR
+          INSTR(LOWER(${DiaryEntriesTable.textData}), LOWER(?)) > 0 OR
+          INSTR(LOWER(${DiaryEntriesTable.mood}), LOWER(?)) > 0 OR
+          EXISTS (
+            SELECT 1
+            FROM ${DiaryTimelineItemsTable.name} timeline
+            WHERE timeline.${DiaryTimelineItemsTable.entryDate} =
+                  ${DiaryEntriesTable.name}.${DiaryEntriesTable.date}
+              AND (
+                INSTR(
+                  LOWER(timeline.${DiaryTimelineItemsTable.textData}), LOWER(?)
+                ) > 0 OR
+                INSTR(
+                  LOWER(timeline.${DiaryTimelineItemsTable.mood}), LOWER(?)
+                ) > 0
+              )
+          )
         )
       ''',
       whereArgs: List.filled(6, searchText),
@@ -501,7 +511,9 @@ class DiaryDatabase {
     final database = await _appDatabase.database;
     final rows = await database.query(
       DiaryEntriesTable.name,
-      where: '${DiaryEntriesTable.date} BETWEEN ? AND ?',
+      where:
+          '${DiaryEntriesTable.date} BETWEEN ? AND ? AND '
+          '${DiaryEntriesTable.deletedAt} IS NULL',
       whereArgs: [firstDateKey, lastDateKey],
     );
     final entries = await _attachMedia(database, rows);
@@ -515,13 +527,208 @@ class DiaryDatabase {
     });
   }
 
-  // Deletes an entry and its related media through cascade deletion.
+  // Moves an entry to Trash, where it remains recoverable for 30 days.
   Future<void> deleteEntry(String date) async {
     final database = await _appDatabase.database;
-    await database.delete(
+    final timestamp = _timestamp();
+    final changedRows = await database.update(
       DiaryEntriesTable.name,
+      {
+        DiaryEntriesTable.deletedAt: timestamp,
+        DiaryEntriesTable.updatedAt: timestamp,
+      },
+      where:
+          '${DiaryEntriesTable.date} = ? AND '
+          '${DiaryEntriesTable.deletedAt} IS NULL',
+      whereArgs: [date],
+    );
+    if (changedRows == 0) {
+      throw StateError('No active diary entry exists for $date.');
+    }
+  }
+
+  // Returns trashed entries with the most recently deleted item first.
+  Future<List<DiaryEntryMap>> getTrashedEntriesNewestFirst() async {
+    final database = await _appDatabase.database;
+    final rows = await database.query(
+      DiaryEntriesTable.name,
+      where: '${DiaryEntriesTable.deletedAt} IS NOT NULL',
+      orderBy: '${DiaryEntriesTable.deletedAt} DESC',
+    );
+    return _attachMedia(database, rows);
+  }
+
+  // Restores one entry to the calendar, lists, and search results.
+  Future<void> restoreEntry(String date) async {
+    final database = await _appDatabase.database;
+    await database.update(
+      DiaryEntriesTable.name,
+      {
+        DiaryEntriesTable.deletedAt: null,
+        DiaryEntriesTable.updatedAt: _timestamp(),
+      },
       where: '${DiaryEntriesTable.date} = ?',
       whereArgs: [date],
+    );
+  }
+
+  // Permanently deletes one entry and returns its media files for cleanup.
+  Future<List<String>> permanentlyDeleteEntry(String date) async {
+    final database = await _appDatabase.database;
+    return database.transaction((transaction) async {
+      final rows = await transaction.query(
+        DiaryEntriesTable.name,
+        columns: [DiaryEntriesTable.date],
+        where:
+            '${DiaryEntriesTable.date} = ? AND '
+            '${DiaryEntriesTable.deletedAt} IS NOT NULL',
+        whereArgs: [date],
+        limit: 1,
+      );
+      if (rows.isEmpty) return <String>[];
+      return _permanentlyDeleteDates(transaction, [date]);
+    });
+  }
+
+  // Permanently deletes trash older than 30 days and returns its media files.
+  Future<List<String>> deleteExpiredTrash() async {
+    final cutoff = DateTime.now()
+        .toUtc()
+        .subtract(const Duration(days: 30))
+        .toIso8601String();
+    final database = await _appDatabase.database;
+    return database.transaction((transaction) async {
+      final rows = await transaction.query(
+        DiaryEntriesTable.name,
+        columns: [DiaryEntriesTable.date],
+        where:
+            '${DiaryEntriesTable.deletedAt} IS NOT NULL AND '
+            '${DiaryEntriesTable.deletedAt} <= ?',
+        whereArgs: [cutoff],
+      );
+      return _permanentlyDeleteDates(
+        transaction,
+        rows
+            .map((row) => row[DiaryEntriesTable.date])
+            .whereType<String>()
+            .toList(growable: false),
+      );
+    });
+  }
+
+  // Permanently deletes every entry currently in Trash.
+  Future<List<String>> emptyTrash() async {
+    final database = await _appDatabase.database;
+    return database.transaction((transaction) async {
+      final rows = await transaction.query(
+        DiaryEntriesTable.name,
+        columns: [DiaryEntriesTable.date],
+        where: '${DiaryEntriesTable.deletedAt} IS NOT NULL',
+      );
+      return _permanentlyDeleteDates(
+        transaction,
+        rows
+            .map((row) => row[DiaryEntriesTable.date])
+            .whereType<String>()
+            .toList(growable: false),
+      );
+    });
+  }
+
+  // Removes entry rows in one transaction and gathers their local media paths.
+  Future<List<String>> _permanentlyDeleteDates(
+    DatabaseExecutor database,
+    List<String> dates,
+  ) async {
+    if (dates.isEmpty) return [];
+    final placeholders = List.filled(dates.length, '?').join(', ');
+    final mediaRows = await database.query(
+      DiaryMediaTable.name,
+      columns: [DiaryMediaTable.mediaLocation],
+      where: '${DiaryMediaTable.entryDate} IN ($placeholders)',
+      whereArgs: dates,
+    );
+    final timelineRows = await database.query(
+      DiaryTimelineItemsTable.name,
+      columns: [
+        DiaryTimelineItemsTable.id,
+        DiaryTimelineItemsTable.locationSnapshotId,
+        DiaryTimelineItemsTable.weatherSnapshotId,
+      ],
+      where: '${DiaryTimelineItemsTable.entryDate} IN ($placeholders)',
+      whereArgs: dates,
+    );
+    final timelineIds = timelineRows
+        .map((row) => row[DiaryTimelineItemsTable.id])
+        .whereType<int>()
+        .toList(growable: false);
+    final locationSnapshotIds = timelineRows
+        .map((row) => row[DiaryTimelineItemsTable.locationSnapshotId])
+        .whereType<int>()
+        .toSet();
+    final weatherSnapshotIds = timelineRows
+        .map((row) => row[DiaryTimelineItemsTable.weatherSnapshotId])
+        .whereType<int>()
+        .toSet();
+
+    if (timelineIds.isNotEmpty) {
+      final timelinePlaceholders = List.filled(
+        timelineIds.length,
+        '?',
+      ).join(', ');
+      await database.delete(
+        MemoryPromptsTable.name,
+        where:
+            '${MemoryPromptsTable.timelineItemId} '
+            'IN ($timelinePlaceholders)',
+        whereArgs: timelineIds,
+      );
+    }
+    await database.delete(
+      DiaryEntriesTable.name,
+      where: '${DiaryEntriesTable.date} IN ($placeholders)',
+      whereArgs: dates,
+    );
+
+    await _deleteOrphanSnapshots(
+      database,
+      table: LocationSnapshotsTable.name,
+      idColumn: LocationSnapshotsTable.id,
+      timelineColumn: DiaryTimelineItemsTable.locationSnapshotId,
+      ids: locationSnapshotIds,
+    );
+    await _deleteOrphanSnapshots(
+      database,
+      table: WeatherSnapshotsTable.name,
+      idColumn: WeatherSnapshotsTable.id,
+      timelineColumn: DiaryTimelineItemsTable.weatherSnapshotId,
+      ids: weatherSnapshotIds,
+    );
+
+    return mediaRows
+        .map((row) => row[DiaryMediaTable.mediaLocation])
+        .whereType<String>()
+        .toSet()
+        .toList(growable: false);
+  }
+
+  // Removes location or weather snapshots no remaining timeline item uses.
+  Future<void> _deleteOrphanSnapshots(
+    DatabaseExecutor database, {
+    required String table,
+    required String idColumn,
+    required String timelineColumn,
+    required Set<int> ids,
+  }) async {
+    if (ids.isEmpty) return;
+    final placeholders = List.filled(ids.length, '?').join(', ');
+    await database.delete(
+      table,
+      where:
+          '$idColumn IN ($placeholders) AND NOT EXISTS ('
+          'SELECT 1 FROM ${DiaryTimelineItemsTable.name} timeline '
+          'WHERE timeline.$timelineColumn = $table.$idColumn)',
+      whereArgs: ids.toList(growable: false),
     );
   }
 
@@ -657,6 +864,7 @@ class DiaryDatabase {
       'images_loc': imageLocations,
       'voice_memos_loc': voiceMemoLocations,
       'mood': row[DiaryEntriesTable.mood],
+      'deleted_at': row[DiaryEntriesTable.deletedAt],
     };
   }
 
@@ -670,6 +878,7 @@ class DiaryDatabase {
       'images_loc': <String>[],
       'voice_memos_loc': <String>[],
       'mood': '',
+      'deleted_at': null,
     };
   }
 

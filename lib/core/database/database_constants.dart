@@ -1,7 +1,7 @@
 // Table and column names live here to prevent spelling mistakes in SQL.
 abstract final class DatabaseConstants {
   static const name = 'chronologe.db';
-  static const version = 9;
+  static const version = 10;
 }
 
 abstract final class DiaryEntriesTable {
@@ -12,6 +12,7 @@ abstract final class DiaryEntriesTable {
   static const mood = 'mood';
   static const createdAt = 'created_at';
   static const updatedAt = 'updated_at';
+  static const deletedAt = 'deleted_at';
 }
 
 // Media belongs to a diary summary or to one timeline item.

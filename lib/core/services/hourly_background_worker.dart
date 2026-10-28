@@ -80,14 +80,14 @@ Future<void> initializeHourlyBackgroundWorker() async {
 Future<void> scheduleHourlyBackgroundWorker() async {
   await DiagnosticLogService.record(
     'scheduler',
-    'Requesting periodic worker; wake interval=15m, data interval=1h',
+    'Requesting hourly backup worker; primary collection=location stream',
   );
   try {
     await Workmanager().registerPeriodicTask(
       hourlyTimelineTask,
       hourlyTimelineTask,
-      frequency: const Duration(minutes: 15),
-      initialDelay: const Duration(minutes: 15),
+      frequency: const Duration(hours: 1),
+      initialDelay: const Duration(hours: 1),
       existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
       backoffPolicy: BackoffPolicy.linear,
       backoffPolicyDelay: const Duration(minutes: 10),
