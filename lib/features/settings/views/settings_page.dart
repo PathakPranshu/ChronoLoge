@@ -16,7 +16,7 @@ import '../models/app_settings.dart';
 import '../viewmodels/cloud_backup_view_model.dart';
 import '../viewmodels/settings_view_model.dart';
 
-/// Displays account, appearance, units, news, and backup controls.
+/// Displays account, personalization, diary, and storage controls.
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
@@ -26,11 +26,10 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 enum _SettingsSection {
   account,
-  appearance,
+  personalization,
   automaticDiary,
   notifications,
   integrations,
-  units,
   news,
   backups,
   storage,
@@ -136,57 +135,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ),
             _CollapsibleSettingsSection(
-              title: 'Appearance',
-              icon: Icons.palette_outlined,
-              isExpanded: _openSection == _SettingsSection.appearance,
-              onTap: () => _toggleSection(_SettingsSection.appearance),
-              child: Card(
-                child: Column(
-                  children: [
-                    SwitchListTile.adaptive(
-                      title: const Text('Dark theme'),
-                      subtitle: const Text(
-                        'Switch between light and dark mode',
-                      ),
-                      value: settings.isDarkMode,
-                      onChanged: (value) => ref
-                          .read(settingsViewModelProvider.notifier)
-                          .setDarkMode(value),
-                    ),
-                    const Divider(height: 1),
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Accent color'),
-                          const SizedBox(height: 14),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              for (
-                                var index = 0;
-                                index < _accentColors.length;
-                                index++
-                              )
-                                _AccentColorBlock(
-                                  colorValue: _accentColors[index],
-                                  colorNumber: index + 1,
-                                  isSelected:
-                                      settings.accentColorValue ==
-                                      _accentColors[index],
-                                  onTap: () => ref
-                                      .read(settingsViewModelProvider.notifier)
-                                      .setAccentColor(_accentColors[index]),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              title: 'Personalization',
+              icon: Icons.tune_rounded,
+              isExpanded: _openSection == _SettingsSection.personalization,
+              onTap: () => _toggleSection(_SettingsSection.personalization),
+              child: _PersonalizationCard(
+                settings: settings,
+                accentColors: _accentColors,
               ),
             ),
             _CollapsibleSettingsSection(
@@ -209,71 +164,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               isExpanded: _openSection == _SettingsSection.integrations,
               onTap: () => _toggleSection(_SettingsSection.integrations),
               child: const _HealthIntegrationCard(),
-            ),
-            _CollapsibleSettingsSection(
-              title: 'Units & time',
-              icon: Icons.straighten_outlined,
-              isExpanded: _openSection == _SettingsSection.units,
-              onTap: () => _toggleSection(_SettingsSection.units),
-              child: Card(
-                child: Column(
-                  children: [
-                    _UnitSettingRow<TemperatureUnit>(
-                      title: 'Temperature',
-                      segments: const [
-                        ButtonSegment(
-                          value: TemperatureUnit.celsius,
-                          label: Text('°C'),
-                        ),
-                        ButtonSegment(
-                          value: TemperatureUnit.fahrenheit,
-                          label: Text('°F'),
-                        ),
-                      ],
-                      selected: settings.temperatureUnit,
-                      onChanged: (unit) => ref
-                          .read(settingsViewModelProvider.notifier)
-                          .setTemperatureUnit(unit),
-                    ),
-                    const Divider(height: 1),
-                    _UnitSettingRow<DistanceUnit>(
-                      title: 'Distance',
-                      segments: const [
-                        ButtonSegment(
-                          value: DistanceUnit.kilometers,
-                          label: Text('km'),
-                        ),
-                        ButtonSegment(
-                          value: DistanceUnit.miles,
-                          label: Text('mi'),
-                        ),
-                      ],
-                      selected: settings.distanceUnit,
-                      onChanged: (unit) => ref
-                          .read(settingsViewModelProvider.notifier)
-                          .setDistanceUnit(unit),
-                    ),
-                    const Divider(height: 1),
-                    _UnitSettingRow<TimeFormat>(
-                      title: 'Time',
-                      segments: const [
-                        ButtonSegment(
-                          value: TimeFormat.hour24,
-                          label: Text('24hr'),
-                        ),
-                        ButtonSegment(
-                          value: TimeFormat.hour12,
-                          label: Text('12hr'),
-                        ),
-                      ],
-                      selected: settings.timeFormat,
-                      onChanged: (format) => ref
-                          .read(settingsViewModelProvider.notifier)
-                          .setTimeFormat(format),
-                    ),
-                  ],
-                ),
-              ),
             ),
             _CollapsibleSettingsSection(
               title: 'News interests',
@@ -412,6 +302,116 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 }
 
 // A tappable Settings heading that reveals one group of controls.
+class _PersonalizationCard extends ConsumerWidget {
+  const _PersonalizationCard({
+    required this.settings,
+    required this.accentColors,
+  });
+
+  final AppSettings settings;
+  final List<int> accentColors;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final settingsController = ref.read(settingsViewModelProvider.notifier);
+
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Row(
+              children: [
+                const Icon(Icons.palette_outlined),
+                const SizedBox(width: 10),
+                Text('Appearance', style: theme.textTheme.titleMedium),
+              ],
+            ),
+          ),
+          SwitchListTile.adaptive(
+            title: const Text('Dark theme'),
+            subtitle: const Text('Switch between light and dark mode'),
+            value: settings.isDarkMode,
+            onChanged: settingsController.setDarkMode,
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Accent color'),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (var index = 0; index < accentColors.length; index++)
+                      _AccentColorBlock(
+                        colorValue: accentColors[index],
+                        colorNumber: index + 1,
+                        isSelected:
+                            settings.accentColorValue == accentColors[index],
+                        onTap: () => settingsController.setAccentColor(
+                          accentColors[index],
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Row(
+              children: [
+                const Icon(Icons.straighten_outlined),
+                const SizedBox(width: 10),
+                Text('Units & time', style: theme.textTheme.titleMedium),
+              ],
+            ),
+          ),
+          _UnitSettingRow<TemperatureUnit>(
+            title: 'Temperature',
+            segments: const [
+              ButtonSegment(value: TemperatureUnit.celsius, label: Text('°C')),
+              ButtonSegment(
+                value: TemperatureUnit.fahrenheit,
+                label: Text('°F'),
+              ),
+            ],
+            selected: settings.temperatureUnit,
+            onChanged: settingsController.setTemperatureUnit,
+          ),
+          const Divider(height: 1),
+          _UnitSettingRow<DistanceUnit>(
+            title: 'Distance',
+            segments: const [
+              ButtonSegment(value: DistanceUnit.kilometers, label: Text('km')),
+              ButtonSegment(value: DistanceUnit.miles, label: Text('mi')),
+            ],
+            selected: settings.distanceUnit,
+            onChanged: settingsController.setDistanceUnit,
+          ),
+          const Divider(height: 1),
+          _UnitSettingRow<TimeFormat>(
+            title: 'Time',
+            segments: const [
+              ButtonSegment(value: TimeFormat.hour24, label: Text('24hr')),
+              ButtonSegment(value: TimeFormat.hour12, label: Text('12hr')),
+            ],
+            selected: settings.timeFormat,
+            onChanged: settingsController.setTimeFormat,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CollapsibleSettingsSection extends StatelessWidget {
   const _CollapsibleSettingsSection({
     required this.title,

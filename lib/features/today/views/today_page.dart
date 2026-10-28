@@ -96,14 +96,15 @@ class _TodayPageState extends ConsumerState<TodayPage> {
               onDeleteSnippet: _deleteSnippet,
               onDeleteImage: _deleteImage,
               onDeleteVoiceMemo: _deleteVoiceMemo,
+              onPickImages: _pickImages,
+              onRecordVoiceMemo: () => _recordVoiceMemo(today.dateKey),
             );
           },
         ),
       ),
-      floatingActionButton: todayValue == null
+      floatingActionButton: todayValue == null || !todayValue.isAutomaticMode
           ? null
-          : todayValue.isAutomaticMode
-          ? FloatingActionButton(
+          : FloatingActionButton(
               tooltip: 'Add snippet',
               onPressed: todayValue.isAddingSnippet
                   ? null
@@ -114,18 +115,6 @@ class _TodayPageState extends ConsumerState<TodayPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.edit_note_rounded),
-            )
-          : FloatingActionButton.extended(
-              onPressed: todayValue.isPickingImages
-                  ? null
-                  : () => _showAddOptions(todayValue),
-              icon: todayValue.isPickingImages
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.add_rounded),
-              label: Text(todayValue.isPickingImages ? 'Adding...' : 'Add'),
             ),
     );
   }
@@ -244,45 +233,6 @@ class _TodayPageState extends ConsumerState<TodayPage> {
     }
   }
 
-  Future<void> _showAddOptions(TodayState today) async {
-    final action = await showModalBottomSheet<_AddAction>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.add_photo_alternate_outlined),
-                title: const Text('Add images'),
-                onTap: () => Navigator.pop(context, _AddAction.images),
-              ),
-              ListTile(
-                leading: const Icon(Icons.mic_none_rounded),
-                title: const Text('Record voice memo'),
-                onTap: () => Navigator.pop(context, _AddAction.voiceMemo),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (!mounted) return;
-
-    switch (action) {
-      case _AddAction.images:
-        await _pickImages();
-        return;
-      case _AddAction.voiceMemo:
-        await _recordVoiceMemo(today.dateKey);
-        return;
-      case null:
-        return;
-    }
-  }
-
   Future<void> _deleteImage(String imageLocation) async {
     if (!await _confirmDelete('image')) return;
     try {
@@ -343,8 +293,6 @@ class _TodayPageState extends ConsumerState<TodayPage> {
   }
 }
 
-enum _AddAction { images, voiceMemo }
-
 // Lays out either automatic mode or manual mode below the page heading.
 class _TodayContent extends StatelessWidget {
   const _TodayContent({
@@ -360,6 +308,8 @@ class _TodayContent extends StatelessWidget {
     required this.onDeleteSnippet,
     required this.onDeleteImage,
     required this.onDeleteVoiceMemo,
+    required this.onPickImages,
+    required this.onRecordVoiceMemo,
   });
 
   final TodayState today;
@@ -374,6 +324,8 @@ class _TodayContent extends StatelessWidget {
   final ValueChanged<TimelineItem> onDeleteSnippet;
   final ValueChanged<String> onDeleteImage;
   final ValueChanged<String> onDeleteVoiceMemo;
+  final VoidCallback onPickImages;
+  final VoidCallback onRecordVoiceMemo;
 
   @override
   Widget build(BuildContext context) {
@@ -418,16 +370,21 @@ class _TodayContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        Wrap(
-          spacing: 10,
-          runSpacing: 8,
-          children: [
-            _ContextPill(
-              icon: Icons.location_on_outlined,
-              label: today.locationLabel,
-            ),
-            _ContextPill(icon: Icons.cloud_outlined, label: today.weatherLabel),
-          ],
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _ContextPill(
+                icon: Icons.location_on_outlined,
+                label: today.locationLabel,
+              ),
+              const SizedBox(width: 10),
+              _ContextPill(
+                icon: Icons.cloud_outlined,
+                label: today.weatherLabel,
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 30),
         if (today.isAutomaticMode)
@@ -480,6 +437,35 @@ class _TodayContent extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              MoodPicker(selectedMood: today.mood, onSelected: onMoodSelected),
+              const SizedBox(width: 10),
+              IconButton.filledTonal(
+                tooltip: 'Record voice memo',
+                onPressed: onRecordVoiceMemo,
+                icon: Icon(Icons.mic_none_rounded, color: colors.primary),
+              ),
+              const SizedBox(width: 10),
+              IconButton.filledTonal(
+                tooltip: 'Add images',
+                onPressed: today.isPickingImages ? null : onPickImages,
+                icon: today.isPickingImages
+                    ? SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colors.primary,
+                        ),
+                      )
+                    : Icon(
+                        Icons.add_photo_alternate_outlined,
+                        color: colors.primary,
+                      ),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
@@ -493,20 +479,6 @@ class _TodayContent extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'How are you feeling?',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              MoodPicker(selectedMood: today.mood, onSelected: onMoodSelected),
-            ],
           ),
           if (today.voiceMemoLocations.isNotEmpty) ...[
             const SizedBox(height: 28),
@@ -1024,41 +996,47 @@ class _TimelineItemCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (item.locationLabel.isNotEmpty ||
-                            item.weatherLabel.isNotEmpty) ...[
-                          _TimelineContext(
-                            locationLabel: item.locationLabel,
-                            weatherLabel: item.weatherLabel,
+                            item.weatherLabel.isNotEmpty ||
+                            !isHealthItem) ...[
+                          Row(
+                            children: [
+                              Expanded(
+                                child:
+                                    item.locationLabel.isEmpty &&
+                                        item.weatherLabel.isEmpty
+                                    ? const SizedBox.shrink()
+                                    : _TimelineContext(
+                                        locationLabel: item.locationLabel,
+                                        weatherLabel: item.weatherLabel,
+                                      ),
+                              ),
+                              if (!isHealthItem) ...[
+                                const SizedBox(width: 6),
+                                IconButton(
+                                  tooltip: 'Delete snippet',
+                                  onPressed: onDelete,
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints.tightFor(
+                                    width: 32,
+                                    height: 32,
+                                  ),
+                                  icon: Icon(
+                                    Icons.close_rounded,
+                                    size: 20,
+                                    color: colors.primary,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 10),
                         ],
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: item.text.isEmpty
-                                  ? const SizedBox.shrink()
-                                  : Text(
-                                      item.text,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyLarge,
-                                    ),
-                            ),
-                            const SizedBox(width: 6),
-                            if (!isHealthItem)
-                              IconButton(
-                                tooltip: 'Delete snippet',
-                                onPressed: onDelete,
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints.tightFor(
-                                  width: 32,
-                                  height: 32,
-                                ),
-                                icon: const Icon(Icons.close_rounded, size: 20),
-                              ),
-                          ],
-                        ),
+                        if (item.text.isNotEmpty)
+                          Text(
+                            item.text,
+                            style: Theme.of(context).textTheme.bodyLarge,
+                          ),
                         if (emoji != null) ...[
                           const SizedBox(height: 6),
                           Text(emoji, style: const TextStyle(fontSize: 24)),
@@ -1125,24 +1103,26 @@ class _TimelineContext extends StatelessWidget {
   Widget build(BuildContext context) {
     final textStyle = Theme.of(context).textTheme.bodySmall
         ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (locationLabel.isNotEmpty)
-          _TimelineContextRow(
-            icon: Icons.location_on_outlined,
-            label: locationLabel,
-            textStyle: textStyle,
-          ),
-        if (locationLabel.isNotEmpty && weatherLabel.isNotEmpty)
-          const SizedBox(height: 4),
-        if (weatherLabel.isNotEmpty)
-          _TimelineContextRow(
-            icon: Icons.cloud_outlined,
-            label: weatherLabel,
-            textStyle: textStyle,
-          ),
-      ],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          if (locationLabel.isNotEmpty)
+            _TimelineContextRow(
+              icon: Icons.location_on_outlined,
+              label: locationLabel,
+              textStyle: textStyle,
+            ),
+          if (locationLabel.isNotEmpty && weatherLabel.isNotEmpty)
+            const SizedBox(width: 14),
+          if (weatherLabel.isNotEmpty)
+            _TimelineContextRow(
+              icon: Icons.cloud_outlined,
+              label: weatherLabel,
+              textStyle: textStyle,
+            ),
+        ],
+      ),
     );
   }
 }
@@ -1162,17 +1142,11 @@ class _TimelineContextRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 16, color: color),
         const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: textStyle,
-          ),
-        ),
+        Text(label, maxLines: 1, style: textStyle),
       ],
     );
   }
@@ -1298,19 +1272,18 @@ class _SnippetDialogState extends State<_SnippetDialog> {
                     IconButton(
                       tooltip: 'Close snippet',
                       onPressed: _isClosing ? null : _discard,
-                      icon: const Icon(Icons.close_rounded),
+                      icon: Icon(Icons.close_rounded, color: colors.primary),
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
                 if (widget.locationLabel.isNotEmpty ||
-                    widget.weatherLabel.isNotEmpty) ...[
-                  const SizedBox(height: 2),
+                    widget.weatherLabel.isNotEmpty)
                   _TimelineContext(
                     locationLabel: widget.locationLabel,
                     weatherLabel: widget.weatherLabel,
                   ),
-                ],
-                const SizedBox(height: 12),
+                const SizedBox(height: 20),
                 TextField(
                   controller: _controller,
                   autofocus: widget.item == null,
@@ -1333,14 +1306,27 @@ class _SnippetDialogState extends State<_SnippetDialog> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Row(
                   children: [
-                    Text('Mood', style: theme.textTheme.titleSmall),
-                    const Spacer(),
                     MoodPicker(
                       selectedMood: _mood,
                       onSelected: (mood) => setState(() => _mood = mood),
+                    ),
+                    const SizedBox(width: 10),
+                    IconButton.filledTonal(
+                      tooltip: 'Record voice memo',
+                      onPressed: _isClosing ? null : _recordVoiceMemo,
+                      icon: Icon(Icons.mic_none_rounded, color: colors.primary),
+                    ),
+                    const SizedBox(width: 10),
+                    IconButton.filledTonal(
+                      tooltip: 'Add images',
+                      onPressed: _isClosing ? null : _pickImages,
+                      icon: Icon(
+                        Icons.add_photo_alternate_outlined,
+                        color: colors.primary,
+                      ),
                     ),
                   ],
                 ),
@@ -1348,25 +1334,13 @@ class _SnippetDialogState extends State<_SnippetDialog> {
                   const SizedBox(height: 8),
                   _buildAttachments(),
                 ],
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    IconButton.filled(
-                      tooltip: 'Save snippet',
-                      onPressed: _isClosing || !_canSave ? null : _save,
-                      iconSize: 28,
-                      padding: const EdgeInsets.all(15),
-                      icon: const Icon(Icons.save_rounded),
-                    ),
-                    const Spacer(),
-                    IconButton.filledTonal(
-                      tooltip: 'Add media',
-                      onPressed: _isClosing ? null : _showMediaOptions,
-                      iconSize: 28,
-                      padding: const EdgeInsets.all(15),
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                    ),
-                  ],
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _isClosing || !_canSave ? null : _save,
+                    child: const Text('Save'),
+                  ),
                 ),
               ],
             ),
@@ -1377,6 +1351,7 @@ class _SnippetDialogState extends State<_SnippetDialog> {
   }
 
   Widget _buildAttachments() {
+    final colors = Theme.of(context).colorScheme;
     final imageCount = _retainedImageLocations.length + _newImages.length;
     final voiceMemoCount =
         _retainedVoiceMemoLocations.length + _newVoiceMemoLocations.length;
@@ -1422,7 +1397,14 @@ class _SnippetDialogState extends State<_SnippetDialog> {
                               );
                             }
                           }),
-                          icon: const Icon(Icons.close_rounded, size: 16),
+                          style: IconButton.styleFrom(
+                            backgroundColor: colors.surfaceContainerHighest,
+                          ),
+                          icon: Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: colors.primary,
+                          ),
                         ),
                       ),
                     ],
@@ -1440,6 +1422,10 @@ class _SnippetDialogState extends State<_SnippetDialog> {
                   InputChip(
                     avatar: const Icon(Icons.mic_rounded, size: 18),
                     label: Text('Voice memo ${index + 1}'),
+                    deleteIcon: Icon(
+                      Icons.close_rounded,
+                      color: colors.primary,
+                    ),
                     onDeleted: () => _removeVoiceMemo(index),
                   ),
               ],
@@ -1449,57 +1435,23 @@ class _SnippetDialogState extends State<_SnippetDialog> {
     );
   }
 
-  Future<void> _showMediaOptions() async {
-    final action = await showModalBottomSheet<_AddAction>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.add_photo_alternate_outlined),
-                title: const Text('Add images'),
-                onTap: () => Navigator.pop(context, _AddAction.images),
-              ),
-              ListTile(
-                leading: const Icon(Icons.mic_none_rounded),
-                title: const Text('Record voice memo'),
-                onTap: () => Navigator.pop(context, _AddAction.voiceMemo),
-              ),
-            ],
-          ),
-        ),
-      ),
+  Future<void> _pickImages() async {
+    final images = await _imagePicker.pickMultiImage(
+      maxWidth: diaryImageMaxDimension,
+      maxHeight: diaryImageMaxDimension,
+      imageQuality: diaryImageQuality,
+      limit: 10,
+      requestFullMetadata: false,
     );
-    if (!mounted) return;
+    if (mounted && images.isNotEmpty) {
+      setState(() => _newImages.addAll(images));
+    }
+  }
 
-    switch (action) {
-      case _AddAction.images:
-        final images = await _imagePicker.pickMultiImage(
-          maxWidth: diaryImageMaxDimension,
-          maxHeight: diaryImageMaxDimension,
-          imageQuality: diaryImageQuality,
-          limit: 10,
-          requestFullMetadata: false,
-        );
-        if (mounted && images.isNotEmpty) {
-          setState(() => _newImages.addAll(images));
-        }
-        return;
-      case _AddAction.voiceMemo:
-        final memo = await showVoiceMemoDialog(
-          context,
-          dateKey: widget.dateKey,
-        );
-        if (mounted && memo != null) {
-          setState(() => _newVoiceMemoLocations.add(memo));
-        }
-        return;
-      case null:
-        return;
+  Future<void> _recordVoiceMemo() async {
+    final memo = await showVoiceMemoDialog(context, dateKey: widget.dateKey);
+    if (mounted && memo != null) {
+      setState(() => _newVoiceMemoLocations.add(memo));
     }
   }
 

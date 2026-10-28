@@ -46,6 +46,7 @@ class _VoiceMemoDialogState extends State<_VoiceMemoDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -90,7 +91,7 @@ class _VoiceMemoDialogState extends State<_VoiceMemoDialog> {
                 child: IconButton(
                   tooltip: 'Discard voice memo',
                   onPressed: _isClosing ? null : _discard,
-                  icon: const Icon(Icons.close_rounded),
+                  icon: Icon(Icons.close_rounded, color: colors.primary),
                 ),
               ),
             ],

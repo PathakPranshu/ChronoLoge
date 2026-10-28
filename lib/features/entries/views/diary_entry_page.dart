@@ -73,24 +73,12 @@ class _DiaryEntryPageState extends ConsumerState<DiaryEntryPage> {
               onMoodSelected: (mood) => ref
                   .read(diaryEntryViewModelProvider(_dateKey).notifier)
                   .setMood(mood),
+              onPickImages: _pickImages,
+              onRecordVoiceMemo: () => _recordVoiceMemo(entry),
             );
           },
         ),
       ),
-      floatingActionButton: entryValue == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: entryValue.isAddingMedia
-                  ? null
-                  : () => _showAddMedia(entryValue),
-              icon: entryValue.isAddingMedia
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.add_rounded),
-              label: Text(entryValue.isAddingMedia ? 'Adding...' : 'Add'),
-            ),
       bottomNavigationBar: entryValue == null
           ? null
           : SafeArea(
@@ -118,59 +106,33 @@ class _DiaryEntryPageState extends ConsumerState<DiaryEntryPage> {
     );
   }
 
-  Future<void> _showAddMedia(DiaryEntryState entry) async {
-    final action = await showModalBottomSheet<_EntryMediaAction>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.add_photo_alternate_outlined),
-                title: const Text('Add images'),
-                onTap: () => Navigator.pop(context, _EntryMediaAction.images),
-              ),
-              ListTile(
-                leading: const Icon(Icons.mic_none_rounded),
-                title: const Text('Record voice memo'),
-                onTap: () =>
-                    Navigator.pop(context, _EntryMediaAction.voiceMemo),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (!mounted) return;
-
+  Future<void> _pickImages() async {
     try {
-      switch (action) {
-        case _EntryMediaAction.images:
-          await ref
-              .read(diaryEntryViewModelProvider(_dateKey).notifier)
-              .pickImages();
-          return;
-        case _EntryMediaAction.voiceMemo:
-          final memoPath = await showVoiceMemoDialog(
-            context,
-            dateKey: entry.dateKey,
-          );
-          if (memoPath != null && mounted) {
-            await ref
-                .read(diaryEntryViewModelProvider(_dateKey).notifier)
-                .addVoiceMemoDraft(memoPath);
-          }
-          return;
-        case null:
-          return;
-      }
+      await ref
+          .read(diaryEntryViewModelProvider(_dateKey).notifier)
+          .pickImages();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not add that media.')),
+        const SnackBar(content: Text('Could not add those images.')),
+      );
+    }
+  }
+
+  Future<void> _recordVoiceMemo(DiaryEntryState entry) async {
+    try {
+      final memoPath = await showVoiceMemoDialog(
+        context,
+        dateKey: entry.dateKey,
+      );
+      if (memoPath == null || !mounted) return;
+      await ref
+          .read(diaryEntryViewModelProvider(_dateKey).notifier)
+          .addVoiceMemoDraft(memoPath);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not add that voice memo.')),
       );
     }
   }
@@ -192,20 +154,22 @@ class _DiaryEntryPageState extends ConsumerState<DiaryEntryPage> {
   }
 }
 
-enum _EntryMediaAction { images, voiceMemo }
-
 class _EntryEditor extends StatelessWidget {
   const _EntryEditor({
     required this.entry,
     required this.titleController,
     required this.textController,
     required this.onMoodSelected,
+    required this.onPickImages,
+    required this.onRecordVoiceMemo,
   });
 
   final DiaryEntryState entry;
   final TextEditingController titleController;
   final TextEditingController textController;
   final ValueChanged<String> onMoodSelected;
+  final VoidCallback onPickImages;
+  final VoidCallback onRecordVoiceMemo;
 
   @override
   Widget build(BuildContext context) {
@@ -245,15 +209,30 @@ class _EntryEditor extends StatelessWidget {
         const SizedBox(height: 20),
         Row(
           children: [
-            Expanded(
-              child: Text(
-                'Mood',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
             MoodPicker(selectedMood: entry.mood, onSelected: onMoodSelected),
+            const SizedBox(width: 10),
+            IconButton.filledTonal(
+              tooltip: 'Record voice memo',
+              onPressed: entry.isAddingMedia ? null : onRecordVoiceMemo,
+              icon: Icon(Icons.mic_none_rounded, color: colors.primary),
+            ),
+            const SizedBox(width: 10),
+            IconButton.filledTonal(
+              tooltip: 'Add images',
+              onPressed: entry.isAddingMedia ? null : onPickImages,
+              icon: entry.isAddingMedia
+                  ? SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: colors.primary,
+                      ),
+                    )
+                  : Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: colors.primary,
+                    ),
+            ),
           ],
         ),
         if (entry.voiceMemoLocations.isNotEmpty) ...[

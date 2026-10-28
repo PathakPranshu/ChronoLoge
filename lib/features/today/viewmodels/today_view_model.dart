@@ -461,7 +461,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
               occurredAt:
                   DateTime.tryParse(row['occurred_at']! as String)?.toLocal() ??
                   date,
-              text: row['text_data'] as String? ?? '',
+              text: _displayTimelineText(row['text_data'] as String? ?? ''),
               mood: row['mood'] as String? ?? '',
               imageLocations: _timelineMediaLocations(
                 row,
@@ -493,6 +493,13 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
       }
     }
     return null;
+  }
+
+  // Keeps older baseline rows consistent with the current wording.
+  String _displayTimelineText(String text) {
+    return text == 'Started tracking today'
+        ? 'Recording your diary for today'
+        : text;
   }
 
   Future<void> _loadWeatherAfterBuild(

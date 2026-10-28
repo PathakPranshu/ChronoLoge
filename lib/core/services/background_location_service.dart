@@ -1081,7 +1081,7 @@ class BackgroundLocationService {
           ? 'weather'
           : 'hourly_checkin';
       final textData = needsDailyBaseline
-          ? 'Started tracking today'
+          ? 'Recording your diary for today'
           : weatherChanged
           ? _weatherChangeText(
               oldTemperature: oldTemperature,
