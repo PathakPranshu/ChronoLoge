@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -9,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/constants/media_constants.dart';
 import '../../../core/utils/display_helpers.dart';
+import '../../../core/utils/file_helpers.dart';
 import '../../../core/widgets/encrypted_media_image.dart';
 import '../../../core/widgets/mood_picker.dart';
 import '../../../core/widgets/voice_memo_player.dart';
@@ -1512,7 +1512,7 @@ class _SnippetDialogState extends State<_SnippetDialog> {
     final newIndex = index - _retainedVoiceMemoLocations.length;
     final location = _newVoiceMemoLocations.removeAt(newIndex);
     setState(() {});
-    await _deleteFile(location);
+    await deleteFileIfPresent(location);
   }
 
   Future<void> _discard() async {
@@ -1545,13 +1545,8 @@ class _SnippetDialogState extends State<_SnippetDialog> {
 
   Future<void> _deleteNewVoiceMemoDrafts() async {
     for (final location in _newVoiceMemoLocations) {
-      await _deleteFile(location);
+      await deleteFileIfPresent(location);
     }
-  }
-
-  Future<void> _deleteFile(String location) async {
-    final file = File(location);
-    if (await file.exists()) await file.delete();
   }
 }
 

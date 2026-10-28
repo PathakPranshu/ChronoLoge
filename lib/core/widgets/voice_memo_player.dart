@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../services/media_encryption_provider.dart';
+import '../utils/file_helpers.dart';
 
 /// Plays one encrypted voice memo.
 ///
@@ -191,13 +191,7 @@ class _VoiceMemoPlayerState extends ConsumerState<VoiceMemoPlayer> {
     await _player.dispose();
     final path = _temporaryPlaybackPath;
     if (path == null) return;
-
-    try {
-      final file = File(path);
-      if (await file.exists()) await file.delete();
-    } on FileSystemException {
-      // The operating system also clears old temporary files.
-    }
+    await deleteFileIfPresent(path);
   }
 
   String _formatDuration(Duration duration) {

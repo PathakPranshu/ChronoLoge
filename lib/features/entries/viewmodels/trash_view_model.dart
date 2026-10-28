@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
 import '../../../core/database/diary_database.dart';
 import '../../../core/services/diagnostic_log_service.dart';
+import '../../../core/utils/file_helpers.dart';
 import '../../search/viewmodels/search_view_model.dart';
 import 'entries_view_model.dart';
 
@@ -16,7 +15,7 @@ final trashViewModelProvider =
 /// Runs the 30-day cleanup even when the Trash page is never opened.
 final trashMaintenanceProvider = FutureProvider<void>((ref) async {
   final files = await ref.read(diaryDatabaseProvider).deleteExpiredTrash();
-  await _deleteLocalFiles(files);
+  await deleteFilesIfPresent(files);
   if (files.isNotEmpty) {
     await DiagnosticLogService.record(
       'trash',
@@ -31,7 +30,7 @@ class TrashViewModel extends AsyncNotifier<List<DiaryEntryMap>> {
   Future<List<DiaryEntryMap>> build() async {
     final database = ref.read(diaryDatabaseProvider);
     final expiredFiles = await database.deleteExpiredTrash();
-    await _deleteLocalFiles(expiredFiles);
+    await deleteFilesIfPresent(expiredFiles);
     return database.getTrashedEntriesNewestFirst();
   }
 
@@ -47,7 +46,7 @@ class TrashViewModel extends AsyncNotifier<List<DiaryEntryMap>> {
     final files = await ref
         .read(diaryDatabaseProvider)
         .permanentlyDeleteEntry(date);
-    await _deleteLocalFiles(files);
+    await deleteFilesIfPresent(files);
     _refreshDiaryPages();
     await _reload();
   }
@@ -55,7 +54,7 @@ class TrashViewModel extends AsyncNotifier<List<DiaryEntryMap>> {
   // Deletes every entry and media file currently in Trash.
   Future<void> emptyTrash() async {
     final files = await ref.read(diaryDatabaseProvider).emptyTrash();
-    await _deleteLocalFiles(files);
+    await deleteFilesIfPresent(files);
     _refreshDiaryPages();
     await _reload();
   }
@@ -70,17 +69,5 @@ class TrashViewModel extends AsyncNotifier<List<DiaryEntryMap>> {
   void _refreshDiaryPages() {
     ref.invalidate(entriesViewModelProvider);
     ref.invalidate(searchViewModelProvider);
-  }
-}
-
-Future<void> _deleteLocalFiles(Iterable<String> paths) async {
-  for (final path in paths.toSet()) {
-    if (path.trim().isEmpty) continue;
-    try {
-      final file = File(path);
-      if (await file.exists()) await file.delete();
-    } on FileSystemException {
-      // A missing or locked file should not stop the rest of Trash cleanup.
-    }
   }
 }

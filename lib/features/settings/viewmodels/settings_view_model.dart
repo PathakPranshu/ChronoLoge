@@ -213,11 +213,7 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
   }
 
   Future<void> _writeSetting(String name, String value) async {
-    if (await _database.getSetting(name) == null) {
-      await _database.addSetting(name, value);
-    } else {
-      await _database.changeSetting(name, value);
-    }
+    await _database.setSetting(name, value);
   }
 
   static List<String> _decodeNewsInterests(String? storedValue) {

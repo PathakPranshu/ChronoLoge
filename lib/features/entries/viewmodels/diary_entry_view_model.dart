@@ -11,6 +11,7 @@ import '../../../core/database/database_providers.dart';
 import '../../../core/services/media_encryption_provider.dart';
 import '../../../core/services/media_encryption_service.dart';
 import '../../../core/utils/display_helpers.dart';
+import '../../../core/utils/file_helpers.dart';
 
 final diaryEntryViewModelProvider = AsyncNotifierProvider.autoDispose
     .family<DiaryEntryViewModel, DiaryEntryState, String>(
@@ -148,8 +149,7 @@ class DiaryEntryViewModel extends AsyncNotifier<DiaryEntryState> {
           await _mediaEncryption.encryptFile(destination);
           _pendingImages.add(destination);
         } catch (_) {
-          final copiedFile = File(destination);
-          if (await copiedFile.exists()) await copiedFile.delete();
+          await deleteFileIfPresent(destination);
           rethrow;
         }
       }
@@ -171,8 +171,7 @@ class DiaryEntryViewModel extends AsyncNotifier<DiaryEntryState> {
     try {
       await _mediaEncryption.encryptFile(audioLocation);
     } catch (_) {
-      final file = File(audioLocation);
-      if (await file.exists()) await file.delete();
+      await deleteFileIfPresent(audioLocation);
       rethrow;
     }
     _pendingVoiceMemos.add(audioLocation);
@@ -225,13 +224,6 @@ class DiaryEntryViewModel extends AsyncNotifier<DiaryEntryState> {
   }
 
   Future<void> _discardPendingMedia() async {
-    for (final filePath in [..._pendingImages, ..._pendingVoiceMemos]) {
-      try {
-        final file = File(filePath);
-        if (await file.exists()) await file.delete();
-      } on FileSystemException {
-        // A stale draft file is harmless and can be cleaned up later.
-      }
-    }
+    await deleteFilesIfPresent([..._pendingImages, ..._pendingVoiceMemos]);
   }
 }

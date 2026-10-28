@@ -8,7 +8,6 @@ environment:
 
 dependencies:
   cryptography: ^2.9.0
-  cryptography_flutter: ^2.3.4
   firebase_auth: ^6.7.0
   firebase_core: ^4.15.0
   firebase_storage: ^13.6.0
@@ -33,7 +32,6 @@ dependencies:
   record: ^7.1.1
   share_plus: ^13.3.1
   sqflite_sqlcipher: ^3.4.1
-  table_calendar: ^3.2.1
   timezone: ^0.10.1
   workmanager: ^0.10.10
 

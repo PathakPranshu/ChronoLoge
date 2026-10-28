@@ -7,6 +7,8 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
+import '../../../core/utils/file_helpers.dart';
+
 /// The possible stages of the voice recorder popup.
 enum VoiceMemoStage {
   ready,
@@ -189,8 +191,7 @@ class VoiceMemoViewModel extends ChangeNotifier {
     if (!keepRecording) {
       final draftPath = _draftPath;
       if (draftPath != null) {
-        final draft = File(draftPath);
-        if (await draft.exists()) await draft.delete();
+        await deleteFileIfPresent(draftPath);
       }
     }
   }

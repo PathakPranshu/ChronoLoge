@@ -16,6 +16,7 @@ import '../../../core/services/media_encryption_provider.dart';
 import '../../../core/services/media_encryption_service.dart';
 import '../../../core/services/weather_location_service.dart';
 import '../../../core/utils/display_helpers.dart';
+import '../../../core/utils/file_helpers.dart';
 import '../../settings/models/app_settings.dart';
 import '../../settings/viewmodels/settings_view_model.dart';
 
@@ -243,7 +244,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
     } catch (_) {
       if (!savedToDatabase) {
         for (final location in [...storedImages, ...voiceMemoLocations]) {
-          await _deleteFileIfPresent(location);
+          await deleteFileIfPresent(location);
         }
       }
       final latest = state.value;
@@ -295,13 +296,13 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
         ),
       ];
       for (final location in removedLocations) {
-        await _deleteFileIfPresent(location);
+        await deleteFileIfPresent(location);
       }
       await _reloadEntry(current.dateKey);
     } catch (_) {
       if (!savedToDatabase) {
         for (final location in [...copiedImages, ...newVoiceMemoLocations]) {
-          await _deleteFileIfPresent(location);
+          await deleteFileIfPresent(location);
         }
       }
       final latest = state.value;
@@ -319,7 +320,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
       ...item.imageLocations,
       ...item.voiceMemoLocations,
     ]) {
-      await _deleteFileIfPresent(location);
+      await deleteFileIfPresent(location);
     }
     await _reloadEntry(current.dateKey);
   }
@@ -333,11 +334,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
   Future<void> setAutomaticMode(bool isAutomatic) async {
     final settings = ref.read(settingsDatabaseProvider);
     final value = isAutomatic ? 'auto' : 'manual';
-    if (await settings.getSetting(_diaryModeSetting) == null) {
-      await settings.addSetting(_diaryModeSetting, value);
-    } else {
-      await settings.changeSetting(_diaryModeSetting, value);
-    }
+    await settings.setSetting(_diaryModeSetting, value);
     state = AsyncData(
       state.requireValue.copyWith(isAutomaticMode: isAutomatic),
     );
@@ -367,14 +364,14 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
   Future<void> deleteImage(String imageLocation) async {
     final current = state.requireValue;
     await _database.deleteImage(current.dateKey, imageLocation);
-    await _deleteFileIfPresent(imageLocation);
+    await deleteFileIfPresent(imageLocation);
     await _reloadEntry(current.dateKey);
   }
 
   Future<void> deleteVoiceMemo(String audioLocation) async {
     final current = state.requireValue;
     await _database.deleteVoiceMemo(current.dateKey, audioLocation);
-    await _deleteFileIfPresent(audioLocation);
+    await deleteFileIfPresent(audioLocation);
     await _reloadEntry(current.dateKey);
   }
 
@@ -384,7 +381,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
       await _mediaEncryption.encryptFile(audioLocation);
       await _database.addVoiceMemo(current.dateKey, audioLocation);
     } catch (_) {
-      await _deleteFileIfPresent(audioLocation);
+      await deleteFileIfPresent(audioLocation);
       rethrow;
     }
     await _reloadEntry(current.dateKey);
@@ -398,18 +395,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
       return;
     }
     await _mediaEncryption.encryptFiles(await _database.getAllMediaLocations());
-    if (await settingsDatabase.getSetting(_mediaEncryptionMigrationSetting) ==
-        null) {
-      await settingsDatabase.addSetting(
-        _mediaEncryptionMigrationSetting,
-        'true',
-      );
-    } else {
-      await settingsDatabase.changeSetting(
-        _mediaEncryptionMigrationSetting,
-        'true',
-      );
-    }
+    await settingsDatabase.setSetting(_mediaEncryptionMigrationSetting, 'true');
   }
 
   Future<void> _reloadEntry(String dateKey) async {
@@ -540,15 +526,6 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
     }
   }
 
-  Future<void> _deleteFileIfPresent(String filePath) async {
-    try {
-      final file = File(filePath);
-      if (await file.exists()) await file.delete();
-    } on FileSystemException {
-      // The database reference is already removed, so an orphan is harmless.
-    }
-  }
-
   Future<void> _storePickedImages(String dateKey, List<XFile> images) async {
     final documentsDirectory = await getApplicationDocumentsDirectory();
     final imageDirectory = Directory(
@@ -569,8 +546,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
         await _mediaEncryption.encryptFile(destination);
         await _database.addImage(dateKey, destination);
       } catch (_) {
-        final copiedFile = File(destination);
-        if (await copiedFile.exists()) await copiedFile.delete();
+        await deleteFileIfPresent(destination);
         rethrow;
       }
     }
@@ -602,7 +578,7 @@ class TodayViewModel extends AsyncNotifier<TodayState> {
         await _mediaEncryption.encryptFile(destination);
         storedLocations.add(destination);
       } catch (_) {
-        await _deleteFileIfPresent(destination);
+        await deleteFileIfPresent(destination);
         rethrow;
       }
     }
