@@ -11,6 +11,7 @@ import '../../entries/viewmodels/trash_view_model.dart';
 import '../../entries/views/trash_page.dart';
 import '../../integrations/health/viewmodels/health_integration_view_model.dart';
 import '../../notifications/viewmodels/notification_view_model.dart';
+import '../../security/views/app_lock_settings_card.dart';
 import '../../tracking/viewmodels/background_tracking_controller.dart';
 import '../models/app_settings.dart';
 import '../viewmodels/cloud_backup_view_model.dart';
@@ -26,6 +27,7 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 enum _SettingsSection {
   account,
+  security,
   personalization,
   automaticDiary,
   notifications,
@@ -133,6 +135,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ],
                 ),
               ),
+            ),
+            _CollapsibleSettingsSection(
+              title: 'Privacy & security',
+              icon: Icons.security_rounded,
+              isExpanded: _openSection == _SettingsSection.security,
+              onTap: () => _toggleSection(_SettingsSection.security),
+              child: signedInUser == null
+                  ? const Card(
+                      child: ListTile(
+                        title: Text('Sign in to manage the app lock'),
+                      ),
+                    )
+                  : AppLockSettingsCard(userId: signedInUser.uid),
             ),
             _CollapsibleSettingsSection(
               title: 'Personalization',

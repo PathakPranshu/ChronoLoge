@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../tracking/viewmodels/background_tracking_controller.dart';
+import '../../security/app_lock_providers.dart';
+import '../../security/views/app_security_gate.dart';
 import '../viewmodels/authentication_view_model.dart';
 import 'authentication_page.dart';
 import 'signed_in_landing_gate.dart';
@@ -15,6 +17,9 @@ class AuthenticationGate extends ConsumerWidget {
     final user = ref.watch(authenticatedUserProvider);
     ref.listen(authenticatedUserProvider, (previous, next) {
       next.whenData((user) {
+        if (previous?.value?.uid != user?.uid) {
+          ref.read(appLockSessionProvider.notifier).lock();
+        }
         if (previous?.value != null && user == null) {
           ref.invalidate(backgroundTrackingControllerProvider);
         }
@@ -28,9 +33,16 @@ class AuthenticationGate extends ConsumerWidget {
       ),
       data: (user) {
         if (user == null) return const AuthenticationPage();
-        return SignedInLandingGate(
+        return AppSecurityGate(
+          key: ValueKey(user.uid),
           userId: user.uid,
           displayName: user.displayName,
+          onSignOut: () =>
+              ref.read(authenticationViewModelProvider.notifier).signOut(),
+          child: SignedInLandingGate(
+            userId: user.uid,
+            displayName: user.displayName,
+          ),
         );
       },
     );

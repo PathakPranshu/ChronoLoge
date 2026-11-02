@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../models/auth_mode.dart';
 import '../models/authentication_state.dart';
+import '../../security/app_lock_providers.dart';
 
 final firebaseAuthProvider = Provider<FirebaseAuth>(
   (ref) => FirebaseAuth.instance,
@@ -150,6 +151,7 @@ class AuthenticationViewModel extends Notifier<AuthenticationState> {
 
   Future<bool> signOut() async {
     state = state.copyWith(isLoading: true, clearError: true);
+    final userId = _auth.currentUser?.uid;
     try {
       await _auth.signOut();
     } catch (_) {
@@ -168,6 +170,15 @@ class AuthenticationViewModel extends Notifier<AuthenticationState> {
         // prevent the application from locking.
       }
     }
+
+    if (userId != null) {
+      try {
+        await ref.read(appLockServiceProvider).clear(userId);
+      } catch (_) {
+        // Firebase is already signed out, so local cleanup can be retried later.
+      }
+    }
+    ref.read(appLockSessionProvider.notifier).lock();
 
     state = const AuthenticationState();
     return true;
