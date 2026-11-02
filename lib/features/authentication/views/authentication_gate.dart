@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../navigation/views/app_shell.dart';
 import '../../tracking/viewmodels/background_tracking_controller.dart';
 import '../viewmodels/authentication_view_model.dart';
 import 'authentication_page.dart';
+import 'signed_in_landing_gate.dart';
 
 /// Shows sign-in when logged out and the real app when logged in.
 class AuthenticationGate extends ConsumerWidget {
@@ -28,9 +28,10 @@ class AuthenticationGate extends ConsumerWidget {
       ),
       data: (user) {
         if (user == null) return const AuthenticationPage();
-
-        ref.watch(backgroundTrackingControllerProvider);
-        return const AppShell();
+        return SignedInLandingGate(
+          userId: user.uid,
+          displayName: user.displayName,
+        );
       },
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -230,7 +231,13 @@ class CloudBackupService {
 
     try {
       onProgress?.call(0);
-      await backupReference.child('database.bin').writeToFile(databaseDownload);
+      await _downloadFile(
+        backupReference.child('database.bin'),
+        databaseDownload,
+        completedSteps: completedSteps,
+        totalSteps: totalSteps,
+        onProgress: onProgress,
+      );
       stepComplete();
 
       for (final record in mediaRecords) {
@@ -242,9 +249,13 @@ class CloudBackupService {
         final restoredFile = File(
           path.join(restoredMediaDirectory.path, objectName),
         );
-        await backupReference
-            .child('media/$objectName')
-            .writeToFile(restoredFile);
+        await _downloadFile(
+          backupReference.child('media/$objectName'),
+          restoredFile,
+          completedSteps: completedSteps,
+          totalSteps: totalSteps,
+          onProgress: onProgress,
+        );
         restoredPaths[oldPath] = restoredFile.path;
         stepComplete();
       }
@@ -278,6 +289,26 @@ class CloudBackupService {
       return decoded;
     } on Object {
       throw StateError('The backup information is damaged.');
+    }
+  }
+
+  Future<void> _downloadFile(
+    Reference reference,
+    File destination, {
+    required int completedSteps,
+    required int totalSteps,
+    void Function(double progress)? onProgress,
+  }) async {
+    final task = reference.writeToFile(destination);
+    final subscription = task.snapshotEvents.listen((snapshot) {
+      if (snapshot.totalBytes <= 0) return;
+      final fileProgress = snapshot.bytesTransferred / snapshot.totalBytes;
+      onProgress?.call((completedSteps + fileProgress) / totalSteps);
+    });
+    try {
+      await task;
+    } finally {
+      await subscription.cancel();
     }
   }
 

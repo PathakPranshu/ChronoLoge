@@ -465,6 +465,17 @@ class DiaryDatabase {
     }.toList(growable: false);
   }
 
+  // Checks for any local diary, including timeline-only and trashed entries.
+  Future<bool> hasAnyEntries() async {
+    final database = await _appDatabase.database;
+    final rows = await database.query(
+      DiaryEntriesTable.name,
+      columns: [DiaryEntriesTable.date],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
   // Searches manual and automatic diary content using a case-insensitive match.
   Future<List<DiaryEntryMap>> searchDiary(String text) async {
     final searchText = text.trim();
