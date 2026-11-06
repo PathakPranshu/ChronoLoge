@@ -101,6 +101,50 @@ class _DraftEditorScreenState extends ConsumerState<DraftEditorScreen> {
     }
   }
 
+  Future<void> _saveAsDiary() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_isSaving) return;
+
+    setState(() => _isSaving = true);
+
+    try {
+      final database = ref.read(diaryDraftDatabaseProvider);
+
+      await database.saveDraftAsDiary(
+        date: widget.date,
+        title: _titleController.text.trim(),
+        textData: _textController.text.trim(),
+        mood: _moodController.text.trim(),
+        imageLocations: _imageLocations,
+      );
+
+      ref.invalidate(diaryDraftsProvider);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Diary saved successfully. Draft completed.'),
+        ),
+      );
+
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to save diary: $error'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -268,14 +312,22 @@ class _DraftEditorScreenState extends ConsumerState<DraftEditorScreen> {
 
                 FilledButton.icon(
                   onPressed: _isSaving ? null : _saveDraft,
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Save changes'),
+                ),
+
+                const SizedBox(height: 12),
+
+                FilledButton.icon(
+                  onPressed: _isSaving ? null : _saveAsDiary,
                   icon: _isSaving
                       ? const SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.save_outlined),
-                  label: Text(_isSaving ? 'Saving...' : 'Save changes'),
+                      : const Icon(Icons.menu_book_outlined),
+                  label: Text(_isSaving ? 'Saving...' : 'Save as Diary'),
                 ),
               ],
             ),

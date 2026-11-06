@@ -10,6 +10,7 @@ import '../../features/settings/ui/account/account_screen.dart';
 import '../../features/settings/ui/preferences/preferences_screen.dart';
 import '../../features/diary_drafts/ui/drafts_screen.dart';
 import '../../features/diary_drafts/ui/draft_editor_screen.dart';
+import '../../features/diary/ui/diary_screen.dart';
 import '../../features/authentication/ui/login/login_screen.dart';
 import '../../features/authentication/ui/register/register_screen.dart';
 import '../../features/authentication/ui/security/views/pin_setup_screen.dart';
@@ -53,6 +54,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.drafts,
         builder: (context, state) => const DraftsScreen(),
+      ),
+      GoRoute(
+        path: Routes.diary,
+        builder: (context, state) => const DiaryScreen(),
       ),
       GoRoute(
         path: Routes.draftEditor,
@@ -101,12 +106,12 @@ Future<String?> _redirect(
     final settingPIN = state.matchedLocation == Routes.pinSetup;
     final unlocking = state.matchedLocation == Routes.unlock;
 
-    // Must set up a PIN if they haven't
+    // Must set up a PIN if they haven't.
     if (!hasPin) {
       return settingPIN ? null : Routes.pinSetup;
     }
 
-    // Must unlock the app if the session is locked
+    // Must unlock the app if the session is locked.
     if (!isUnlocked) {
       return unlocking ? null : Routes.unlock;
     }

@@ -15,7 +15,6 @@ class DemoWelcome extends ConsumerWidget {
     final colorTheme = theme.colorScheme;
     final textTheme = theme.textTheme;
 
-    // Watch the global authentication stream instead of calling Firebase directly
     final authState = ref.watch(authStateProvider);
 
     return Scaffold(
@@ -24,6 +23,11 @@ class DemoWelcome extends ConsumerWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.menu_book_outlined),
+            tooltip: 'My Diary',
+            onPressed: () => context.push(Routes.diary),
+          ),
           IconButton(
             icon: const Icon(Icons.drafts_outlined),
             tooltip: 'Drafts',
@@ -39,7 +43,6 @@ class DemoWelcome extends ConsumerWidget {
             tooltip: 'Sign Out',
             onPressed: () {
               ref.read(authRepositoryProvider).signOut();
-
               ref.read(sessionUnlockedProvider.notifier).lock();
             },
           ),
@@ -49,13 +52,8 @@ class DemoWelcome extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: authState.when(
-            // When the stream is loading
             loading: () => const CircularProgressIndicator(),
-
-            // When the stream has an error
             error: (error, stack) => Text("Error: $error"),
-
-            // When the stream successfully emits a user (or null if signed out)
             data: (user) {
               if (user == null) {
                 return const Text("Signing out...");

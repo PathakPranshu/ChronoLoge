@@ -5,6 +5,7 @@ abstract final class Routes {
   static const preferences = '/preferences';
   static const drafts = '/drafts';
   static const draftEditor = '/draft-editor';
+  static const diary = '/diary';
   static const login = '/login';
   static const register = '/register';
   static const pinSetup = '/pin-setup';
