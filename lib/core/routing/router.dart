@@ -6,6 +6,10 @@ import '../../demo.dart';
 import '../../features/settings/ui/settings_screen.dart';
 import '../../features/authentication/shared/providers/auth_provider.dart';
 import '../../features/authentication/shared/providers/secure_storage_provider.dart';
+import '../../features/settings/ui/account/account_screen.dart';
+import '../../features/settings/ui/preferences/preferences_screen.dart';
+import '../../features/diary_drafts/ui/drafts_screen.dart';
+import '../../features/diary_drafts/ui/draft_editor_screen.dart';
 import '../../features/authentication/ui/login/login_screen.dart';
 import '../../features/authentication/ui/register/register_screen.dart';
 import '../../features/authentication/ui/security/views/pin_setup_screen.dart';
@@ -37,6 +41,32 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.settings,
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: Routes.preferences,
+        builder: (context, state) => const PreferencesScreen(),
+      ),
+      GoRoute(
+        path: Routes.account,
+        builder: (context, state) => const AccountScreen(),
+      ),
+      GoRoute(
+        path: Routes.drafts,
+        builder: (context, state) => const DraftsScreen(),
+      ),
+      GoRoute(
+        path: Routes.draftEditor,
+        builder: (context, state) {
+          final date = state.uri.queryParameters['date'];
+
+          if (date == null || date.isEmpty) {
+            return const Scaffold(
+              body: Center(child: Text('Draft date is missing.')),
+            );
+          }
+
+          return DraftEditorScreen(date: date);
+        },
       ),
       GoRoute(
         path: Routes.home,

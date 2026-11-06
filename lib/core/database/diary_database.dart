@@ -15,15 +15,35 @@ class DiaryDatabase {
   Future<DiaryEntryMap?> getEntry(String date, {bool readOnly = false}) async {
     final entry = await readEntry(date);
     if (entry != null || readOnly) return entry;
+
+    // Do not silently create an editable entry for a diary in the Recycle Bin.
+    final database = await _appDatabase.database;
+    final trashedRows = await database.query(
+      DiaryEntriesTable.name,
+      columns: [DiaryEntriesTable.deletedAt],
+      where: '${DiaryEntriesTable.date} = ?',
+      whereArgs: [date],
+      limit: 1,
+    );
+
+    if (trashedRows.isNotEmpty &&
+        trashedRows.single[DiaryEntriesTable.deletedAt] != null) {
+      throw StateError(
+        'This diary is in the Recycle Bin. Restore it before editing.',
+      );
+    }
+
     return _emptyEntry(date);
   }
 
-  // Reads a saved entry for a date without creating a default entry.
+  // Reads an active saved entry without creating a default entry.
   Future<DiaryEntryMap?> readEntry(String date) async {
     final database = await _appDatabase.database;
     final rows = await database.query(
       DiaryEntriesTable.name,
-      where: '${DiaryEntriesTable.date} = ?',
+      where:
+          '${DiaryEntriesTable.date} = ? AND '
+          '${DiaryEntriesTable.deletedAt} IS NULL',
       whereArgs: [date],
       limit: 1,
     );
@@ -52,20 +72,25 @@ class DiaryDatabase {
   // Writes one supported entry column inside a transaction.
   Future<void> _changeValue(String date, String column, String value) async {
     final database = await _appDatabase.database;
+
     await database.transaction((transaction) async {
       await _ensureEntry(transaction, date);
+
       await transaction.update(
         DiaryEntriesTable.name,
         {column: value, DiaryEntriesTable.updatedAt: _timestamp()},
-        where: '${DiaryEntriesTable.date} = ?',
+        where:
+            '${DiaryEntriesTable.date} = ? AND '
+            '${DiaryEntriesTable.deletedAt} IS NULL',
         whereArgs: [date],
       );
     });
   }
 
-  // Adds an ordered image location to the entry for a date.
+  // Adds an ordered image location to an active entry.
   Future<void> addImage(String date, String imageLocation) async {
     final database = await _appDatabase.database;
+
     await database.transaction((transaction) async {
       await _ensureEntry(transaction, date);
 
@@ -78,6 +103,7 @@ class DiaryDatabase {
       ''',
         [date],
       );
+
       final nextOrder = result.single['next_order'] as int;
 
       await transaction.insert(DiaryImagesTable.name, {
@@ -85,71 +111,97 @@ class DiaryDatabase {
         DiaryImagesTable.imageLocation: imageLocation,
         DiaryImagesTable.sortOrder: nextOrder,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
+
       await _touchEntry(transaction, date);
     });
   }
 
-  // Removes an image location from the entry for a date.
+  // Removes an image location from an active entry.
   Future<void> deleteImage(String date, String imageLocation) async {
     final database = await _appDatabase.database;
+
     await database.transaction((transaction) async {
       final deleted = await transaction.delete(
         DiaryImagesTable.name,
         where:
             '''
           ${DiaryImagesTable.entryDate} = ? AND
-          ${DiaryImagesTable.imageLocation} = ?
+          ${DiaryImagesTable.imageLocation} = ? AND
+          EXISTS (
+            SELECT 1 FROM ${DiaryEntriesTable.name}
+            WHERE ${DiaryEntriesTable.date} = ?
+            AND ${DiaryEntriesTable.deletedAt} IS NULL
+          )
         ''',
-        whereArgs: [date, imageLocation],
+        whereArgs: [date, imageLocation, date],
       );
-      if (deleted > 0) await _touchEntry(transaction, date);
+
+      if (deleted > 0) {
+        await _touchEntry(transaction, date);
+      }
     });
   }
 
-  // Returns every saved diary entry ordered from newest to oldest.
+  // Returns active diary entries ordered from newest to oldest.
   Future<List<DiaryEntryMap>> getAllEntriesNewestFirst() async {
     final database = await _appDatabase.database;
+
     final rows = await database.query(
       DiaryEntriesTable.name,
+      where: '${DiaryEntriesTable.deletedAt} IS NULL',
       orderBy: '${DiaryEntriesTable.date} DESC',
     );
+
     return _attachImages(database, rows);
   }
 
-  // Searches diary dates, titles, text, and moods using a case-insensitive match.
+  // Searches active diary dates, titles, text, and moods.
   Future<List<DiaryEntryMap>> searchDiary(String text) async {
     final searchText = text.trim();
     if (searchText.isEmpty) return [];
 
     final database = await _appDatabase.database;
+
     final rows = await database.query(
       DiaryEntriesTable.name,
       where:
           '''
-        INSTR(LOWER(${DiaryEntriesTable.date}), LOWER(?)) > 0 OR
-        INSTR(LOWER(${DiaryEntriesTable.title}), LOWER(?)) > 0 OR
-        INSTR(LOWER(${DiaryEntriesTable.textData}), LOWER(?)) > 0 OR
-        INSTR(LOWER(${DiaryEntriesTable.mood}), LOWER(?)) > 0
+        ${DiaryEntriesTable.deletedAt} IS NULL AND (
+          INSTR(LOWER(${DiaryEntriesTable.date}), LOWER(?)) > 0 OR
+          INSTR(LOWER(${DiaryEntriesTable.title}), LOWER(?)) > 0 OR
+          INSTR(LOWER(${DiaryEntriesTable.textData}), LOWER(?)) > 0 OR
+          INSTR(LOWER(${DiaryEntriesTable.mood}), LOWER(?)) > 0
+        )
       ''',
       whereArgs: List.filled(4, searchText),
       orderBy: '${DiaryEntriesTable.date} DESC',
     );
+
     return _attachImages(database, rows);
   }
 
-  // Returns one calendar item per day for the requested month.
+  // Returns active diary entries for the requested month.
   Future<List<DiaryEntryMap>> getMonthData(int year, int month) async {
     final firstDate = DateTime(year, month);
     final lastDate = DateTime(year, month + 1, 0);
+
     final firstDateKey = _dateKey(firstDate);
     final lastDateKey = _dateKey(lastDate);
+
     final database = await _appDatabase.database;
+
     final rows = await database.query(
       DiaryEntriesTable.name,
-      where: '${DiaryEntriesTable.date} BETWEEN ? AND ?',
+      where:
+          '''
+        ${DiaryEntriesTable.date} BETWEEN ? AND ? AND
+        ${DiaryEntriesTable.deletedAt} IS NULL
+      ''',
       whereArgs: [firstDateKey, lastDateKey],
     );
+
     final entries = await _attachImages(database, rows);
+
     final entriesByDate = {
       for (final entry in entries) entry['date']! as String: entry,
     };
@@ -160,13 +212,88 @@ class DiaryDatabase {
     });
   }
 
-  // Deletes an entry and its related images through cascade deletion.
+  // Moves an active diary entry to the Recycle Bin.
+  // Its associated images remain preserved.
   Future<void> deleteEntry(String date) async {
     final database = await _appDatabase.database;
+    final now = _timestamp();
+
+    await database.update(
+      DiaryEntriesTable.name,
+      {DiaryEntriesTable.deletedAt: now, DiaryEntriesTable.updatedAt: now},
+      where:
+          '${DiaryEntriesTable.date} = ? AND '
+          '${DiaryEntriesTable.deletedAt} IS NULL',
+      whereArgs: [date],
+    );
+  }
+
+  // Returns deleted diary entries, newest deletion first.
+  Future<List<DiaryEntryMap>> getTrashedEntries() async {
+    final database = await _appDatabase.database;
+
+    final rows = await database.query(
+      DiaryEntriesTable.name,
+      where: '${DiaryEntriesTable.deletedAt} IS NOT NULL',
+      orderBy: '${DiaryEntriesTable.deletedAt} DESC',
+    );
+
+    return _attachImages(database, rows);
+  }
+
+  // Restores a diary entry from the Recycle Bin.
+  Future<void> restoreEntry(String date) async {
+    final database = await _appDatabase.database;
+
+    await database.update(
+      DiaryEntriesTable.name,
+      {
+        DiaryEntriesTable.deletedAt: null,
+        DiaryEntriesTable.updatedAt: _timestamp(),
+      },
+      where:
+          '${DiaryEntriesTable.date} = ? AND '
+          '${DiaryEntriesTable.deletedAt} IS NOT NULL',
+      whereArgs: [date],
+    );
+  }
+
+  // Permanently deletes a trashed diary and its associated images.
+  Future<void> permanentlyDeleteEntry(String date) async {
+    final database = await _appDatabase.database;
+
     await database.delete(
       DiaryEntriesTable.name,
-      where: '${DiaryEntriesTable.date} = ?',
+      where:
+          '${DiaryEntriesTable.date} = ? AND '
+          '${DiaryEntriesTable.deletedAt} IS NOT NULL',
       whereArgs: [date],
+    );
+  }
+
+  // Permanently removes trashed diary entries older than the given number
+  // of days. The default retention period is 30 days.
+  Future<int> permanentlyDeleteExpiredEntries({int retentionDays = 30}) async {
+    if (retentionDays < 0) {
+      throw ArgumentError.value(
+        retentionDays,
+        'retentionDays',
+        'Must not be negative.',
+      );
+    }
+
+    final database = await _appDatabase.database;
+    final cutoff = DateTime.now()
+        .toUtc()
+        .subtract(Duration(days: retentionDays))
+        .toIso8601String();
+
+    return database.delete(
+      DiaryEntriesTable.name,
+      where:
+          '${DiaryEntriesTable.deletedAt} IS NOT NULL AND '
+          '${DiaryEntriesTable.deletedAt} < ?',
+      whereArgs: [cutoff],
     );
   }
 
@@ -180,6 +307,7 @@ class DiaryDatabase {
     final dates =
         rows.map((row) => row[DiaryEntriesTable.date]! as String).toList()
           ..sort();
+
     final imageRows = await database.query(
       DiaryImagesTable.name,
       where: '${DiaryImagesTable.entryDate} BETWEEN ? AND ?',
@@ -190,10 +318,13 @@ class DiaryDatabase {
         ${DiaryImagesTable.sortOrder} ASC
       ''',
     );
+
     final imagesByDate = <String, List<String>>{};
+
     for (final imageRow in imageRows) {
       final date = imageRow[DiaryImagesTable.entryDate]! as String;
       final location = imageRow[DiaryImagesTable.imageLocation]! as String;
+
       imagesByDate.putIfAbsent(date, () => []).add(location);
     }
 
@@ -217,14 +348,32 @@ class DiaryDatabase {
       whereArgs: [date],
       orderBy: '${DiaryImagesTable.sortOrder} ASC',
     );
+
     return rows
         .map((row) => row[DiaryImagesTable.imageLocation]! as String)
         .toList(growable: false);
   }
 
   // Inserts a blank entry when the requested date does not exist.
+  // Prevents accidental editing of an entry currently in the Recycle Bin.
   Future<void> _ensureEntry(DatabaseExecutor database, String date) async {
+    final existingRows = await database.query(
+      DiaryEntriesTable.name,
+      columns: [DiaryEntriesTable.deletedAt],
+      where: '${DiaryEntriesTable.date} = ?',
+      whereArgs: [date],
+      limit: 1,
+    );
+
+    if (existingRows.isNotEmpty &&
+        existingRows.single[DiaryEntriesTable.deletedAt] != null) {
+      throw StateError(
+        'This diary is in the Recycle Bin. Restore it before editing.',
+      );
+    }
+
     final now = _timestamp();
+
     await database.insert(DiaryEntriesTable.name, {
       DiaryEntriesTable.date: date,
       DiaryEntriesTable.createdAt: now,
@@ -232,12 +381,14 @@ class DiaryDatabase {
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  // Refreshes the updated timestamp after an entry-related change.
+  // Refreshes the updated timestamp of an active entry.
   Future<void> _touchEntry(DatabaseExecutor database, String date) async {
     await database.update(
       DiaryEntriesTable.name,
       {DiaryEntriesTable.updatedAt: _timestamp()},
-      where: '${DiaryEntriesTable.date} = ?',
+      where:
+          '${DiaryEntriesTable.date} = ? AND '
+          '${DiaryEntriesTable.deletedAt} IS NULL',
       whereArgs: [date],
     );
   }

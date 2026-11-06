@@ -25,6 +25,11 @@ class DemoWelcome extends ConsumerWidget {
         elevation: 0,
         actions: [
           IconButton(
+            icon: const Icon(Icons.drafts_outlined),
+            tooltip: 'Drafts',
+            onPressed: () => context.push(Routes.drafts),
+          ),
+          IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
             onPressed: () => context.push(Routes.settings),

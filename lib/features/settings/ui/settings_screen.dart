@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../authentication/shared/providers/auth_provider.dart';
-import '../../../core/themes/theme_controller.dart';
-import '../../../core/themes/font_controller.dart';
 import '../../../core/notifications/notification_settings_controller.dart';
+import '../../../core/routing/routes.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -16,150 +16,171 @@ class SettingsScreen extends ConsumerWidget {
     final authState = ref.watch(authStateProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-        backgroundColor: colors.surface,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-        children: [
-          Text(
-            'Make ChronoLoge yours.',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Manage your account and how your diary works.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: colors.surfaceContainer,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: authState.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, _) => const Text('Unable to load your profile.'),
-              data: (user) => Row(
-                children: [
-                  CircleAvatar(
-                    radius: 26,
-                    backgroundColor: colors.primary,
-                    child: Icon(
-                      Icons.person_outline,
-                      color: colors.onPrimary,
-                      size: 28,
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar.large(title: const Text('Settings'), pinned: true),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                Text(
+                  'Make ChronoLoge yours.',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Manage your account and how your diary works.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Profile card - opens Account screen
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(24),
+                    onTap: () => context.push(Routes.account),
+                    child: Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: colors.outlineVariant),
+                      ),
+                      child: authState.when(
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (_, _) =>
+                            const Text('Unable to load your profile.'),
+                        data: (user) {
+                          final photoUrl = user?.photoURL;
+
+                          return Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 26,
+                                backgroundColor: colors.primaryContainer,
+                                backgroundImage:
+                                    photoUrl != null && photoUrl.isNotEmpty
+                                    ? NetworkImage(photoUrl)
+                                    : null,
+                                child: photoUrl == null || photoUrl.isEmpty
+                                    ? Icon(
+                                        Icons.person_outline,
+                                        color: colors.onPrimaryContainer,
+                                        size: 28,
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      user?.displayName ?? 'ChronoLoge user',
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      user?.email ?? 'No email available',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: colors.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          user?.displayName ?? 'ChronoLoge user',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          user?.email ?? 'No email available',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                ),
+
+                const SizedBox(height: 28),
+
+                // App settings
+                _SettingsSection(
+                  title: 'APP SETTINGS',
+                  onItemTap: (item) {
+                    if (item.title == 'Preferences') {
+                      context.push(Routes.preferences);
+                    } else if (item.title == 'Notifications') {
+                      _showNotificationSettings(context);
+                    } else {
+                      _showComingSoon(context, item.title);
+                    }
+                  },
+                  items: const [
+                    _SettingsItem(
+                      icon: Icons.tune_rounded,
+                      title: 'Preferences',
+                      subtitle: 'Theme and diary appearance',
                     ),
+                    _SettingsItem(
+                      icon: Icons.notifications_outlined,
+                      title: 'Notifications',
+                      subtitle: 'Daily reminders',
+                    ),
+                    _SettingsItem(
+                      icon: Icons.shield_outlined,
+                      title: 'Privacy & Security',
+                      subtitle: 'App lock and biometrics',
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 24),
+
+                // Diary and information
+                _SettingsSection(
+                  title: 'DIARY & INFORMATION',
+                  items: const [
+                    _SettingsItem(
+                      icon: Icons.auto_awesome_outlined,
+                      title: 'Diary Generation',
+                      subtitle: 'Choose how your diary is created',
+                    ),
+                    _SettingsItem(
+                      icon: Icons.backup_outlined,
+                      title: 'Backup & Recovery',
+                      subtitle: 'Manage your diary backups',
+                    ),
+                    _SettingsItem(
+                      icon: Icons.info_outline_rounded,
+                      title: 'App Info',
+                      subtitle: 'About ChronoLoge',
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 28),
+
+                // Footer
+                Center(
+                  child: Text(
+                    'ChronoLoge · Your days, remembered.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 28),
-          _SettingsSection(
-            title: 'APP SETTINGS',
-            onItemTap: (item) {
-              if (item.title == 'Preferences') {
-                _showThemeSelector(context);
-              } else if (item.title == 'Font') {
-                _showFontSelector(context);
-              } else if (item.title == 'Notifications') {
-                _showNotificationSettings(context);
-              } else {
-                _showComingSoon(context, item.title);
-              }
-            },
-            items: const [
-              _SettingsItem(
-                icon: Icons.tune_rounded,
-                title: 'Preferences',
-                subtitle: 'Theme and diary appearance',
-              ),
-              _SettingsItem(
-                icon: Icons.font_download_outlined,
-                title: 'Font',
-                subtitle: 'Choose your app font',
-              ),
-              _SettingsItem(
-                icon: Icons.notifications_outlined,
-                title: 'Notifications',
-                subtitle: 'Daily reminders',
-              ),
-              _SettingsItem(
-                icon: Icons.shield_outlined,
-                title: 'Privacy & Security',
-                subtitle: 'App lock and biometrics',
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _SettingsSection(
-            title: 'DIARY & INFORMATION',
-            items: const [
-              _SettingsItem(
-                icon: Icons.auto_awesome_outlined,
-                title: 'Diary Generation',
-                subtitle: 'Choose how your diary is created',
-              ),
-              _SettingsItem(
-                icon: Icons.backup_outlined,
-                title: 'Backup & Recovery',
-                subtitle: 'Manage your diary backups',
-              ),
-              _SettingsItem(
-                icon: Icons.info_outline_rounded,
-                title: 'App Info',
-                subtitle: 'About ChronoLoge',
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _SettingsSection(
-            title: 'ACCOUNT',
-            items: const [
-              _SettingsItem(
-                icon: Icons.manage_accounts_outlined,
-                title: 'Account',
-                subtitle: 'Profile and sign-in details',
-              ),
-            ],
-          ),
-          const SizedBox(height: 28),
-          Center(
-            child: Text(
-              'ChronoLoge · Your days, remembered.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
+                ),
+              ]),
             ),
           ),
         ],
@@ -167,146 +188,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showThemeSelector(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => Consumer(
-        builder: (context, dialogRef, _) {
-          final selectedMode = dialogRef.watch(themeModeProvider);
-
-          return AlertDialog(
-            title: const Text('Appearance'),
-            content: RadioGroup<ThemeMode>(
-              groupValue: selectedMode,
-              onChanged: (mode) {
-                if (mode != null) {
-                  _saveTheme(dialogContext, dialogRef, mode);
-                }
-              },
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  _ThemeOption(
-                    title: 'System default',
-                    subtitle: 'Follow your device settings',
-                    value: ThemeMode.system,
-                  ),
-                  _ThemeOption(
-                    title: 'Light',
-                    subtitle: 'Always use light appearance',
-                    value: ThemeMode.light,
-                  ),
-                  _ThemeOption(
-                    title: 'Dark',
-                    subtitle: 'Always use dark appearance',
-                    value: ThemeMode.dark,
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Close'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Future<void> _saveTheme(
-    BuildContext context,
-    WidgetRef ref,
-    ThemeMode mode,
-  ) async {
-    try {
-      await ref.read(themeModeProvider.notifier).setThemeMode(mode);
-
-      if (context.mounted) {
-        Navigator.of(context).pop();
-      }
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not save the appearance setting.'),
-          ),
-        );
-      }
-    }
-  }
-
-  void _showFontSelector(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => Consumer(
-        builder: (context, dialogRef, _) {
-          final selectedFont = dialogRef.watch(appFontProvider);
-
-          return AlertDialog(
-            title: const Text('App font'),
-            content: RadioGroup<AppFont>(
-              groupValue: selectedFont,
-              onChanged: (font) {
-                if (font != null) {
-                  _saveFont(dialogContext, dialogRef, font);
-                }
-              },
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  _FontOption(
-                    title: 'Geist',
-                    subtitle: 'ChronoLoge default font',
-                    value: AppFont.geist,
-                  ),
-                  _FontOption(
-                    title: 'Roboto',
-                    subtitle: 'Clean and familiar',
-                    value: AppFont.roboto,
-                  ),
-                  _FontOption(
-                    title: 'Lato',
-                    subtitle: 'Warm and readable',
-                    value: AppFont.lato,
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Close'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Future<void> _saveFont(
-    BuildContext context,
-    WidgetRef ref,
-    AppFont font,
-  ) async {
-    try {
-      await ref.read(appFontProvider.notifier).setFont(font);
-
-      if (context.mounted) {
-        Navigator.of(context).pop();
-      }
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save the font setting.')),
-        );
-      }
-    }
-  }
-
+  // Notification settings
   void _showNotificationSettings(BuildContext context) {
     showDialog<void>(
       context: context,
@@ -361,6 +243,7 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
+  // Coming soon message
   void _showComingSoon(BuildContext context, String title) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$title will be connected in the next step.')),
@@ -368,50 +251,7 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-class _ThemeOption extends StatelessWidget {
-  const _ThemeOption({
-    required this.title,
-    required this.subtitle,
-    required this.value,
-  });
-
-  final String title;
-  final String subtitle;
-  final ThemeMode value;
-
-  @override
-  Widget build(BuildContext context) {
-    return RadioListTile<ThemeMode>(
-      contentPadding: EdgeInsets.zero,
-      title: Text(title),
-      subtitle: Text(subtitle),
-      value: value,
-    );
-  }
-}
-
-class _FontOption extends StatelessWidget {
-  const _FontOption({
-    required this.title,
-    required this.subtitle,
-    required this.value,
-  });
-
-  final String title;
-  final String subtitle;
-  final AppFont value;
-
-  @override
-  Widget build(BuildContext context) {
-    return RadioListTile<AppFont>(
-      contentPadding: EdgeInsets.zero,
-      title: Text(title),
-      subtitle: Text(subtitle),
-      value: value,
-    );
-  }
-}
-
+// Settings section
 class _SettingsSection extends StatelessWidget {
   const _SettingsSection({
     required this.title,
@@ -493,6 +333,7 @@ class _SettingsSection extends StatelessWidget {
   }
 }
 
+// Settings item model
 class _SettingsItem {
   const _SettingsItem({
     required this.icon,

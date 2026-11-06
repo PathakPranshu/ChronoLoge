@@ -1,6 +1,6 @@
 abstract final class DatabaseConstants {
   static const name = 'chronologe.db';
-  static const version = 2;
+  static const version = 3;
 }
 
 abstract final class UserTable {
@@ -18,6 +18,7 @@ abstract final class DiaryEntriesTable {
   static const mood = 'mood';
   static const createdAt = 'created_at';
   static const updatedAt = 'updated_at';
+  static const deletedAt = 'deleted_at';
 }
 
 abstract final class DiaryImagesTable {
@@ -26,6 +27,22 @@ abstract final class DiaryImagesTable {
   static const entryDate = 'entry_date';
   static const imageLocation = 'image_location';
   static const sortOrder = 'sort_order';
+}
+
+abstract final class DiaryDraftsTable {
+  static const name = 'diary_drafts';
+  static const date = 'date';
+  static const title = 'title';
+  static const textData = 'text_data';
+  static const mood = 'mood';
+  static const imagesData = 'images_data';
+  static const status = 'status';
+  static const failureReason = 'failure_reason';
+  static const createdAt = 'created_at';
+  static const updatedAt = 'updated_at';
+
+  static const unfinished = 'unfinished';
+  static const unsaved = 'unsaved';
 }
 
 abstract final class SettingsTable {

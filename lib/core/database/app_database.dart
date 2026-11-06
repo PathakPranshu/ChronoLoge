@@ -40,7 +40,8 @@ class AppDatabase {
         ${DiaryEntriesTable.textData} TEXT NOT NULL DEFAULT '',
         ${DiaryEntriesTable.mood} TEXT NOT NULL DEFAULT '',
         ${DiaryEntriesTable.createdAt} TEXT NOT NULL,
-        ${DiaryEntriesTable.updatedAt} TEXT NOT NULL
+        ${DiaryEntriesTable.updatedAt} TEXT NOT NULL,
+        ${DiaryEntriesTable.deletedAt} TEXT
       )
     ''');
 
@@ -74,6 +75,7 @@ class AppDatabase {
     ''');
 
     await _createSettingsTable(database);
+    await _createDraftsTable(database);
   }
 
   Future<void> _upgradeSchema(
@@ -84,6 +86,14 @@ class AppDatabase {
     if (oldVersion < 2) {
       await _createSettingsTable(database);
     }
+    if (oldVersion < 3) {
+      await database.execute('''
+       ALTER TABLE ${DiaryEntriesTable.name}
+       ADD COLUMN ${DiaryEntriesTable.deletedAt} TEXT
+  ''');
+
+      await _createDraftsTable(database);
+    }
   }
 
   Future<void> _createSettingsTable(Database database) async {
@@ -91,6 +101,28 @@ class AppDatabase {
       CREATE TABLE ${SettingsTable.name} (
         ${SettingsTable.setting} TEXT PRIMARY KEY,
         ${SettingsTable.value} TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createDraftsTable(Database database) async {
+    await database.execute('''
+      CREATE TABLE ${DiaryDraftsTable.name} (
+        ${DiaryDraftsTable.date} TEXT PRIMARY KEY,
+        ${DiaryDraftsTable.title} TEXT NOT NULL DEFAULT '',
+        ${DiaryDraftsTable.textData} TEXT NOT NULL DEFAULT '',
+        ${DiaryDraftsTable.mood} TEXT NOT NULL DEFAULT '',
+        ${DiaryDraftsTable.imagesData} TEXT NOT NULL DEFAULT '[]',
+        ${DiaryDraftsTable.status} TEXT NOT NULL
+          CHECK (
+            ${DiaryDraftsTable.status} IN (
+              '${DiaryDraftsTable.unfinished}',
+              '${DiaryDraftsTable.unsaved}'
+            )
+          ),
+        ${DiaryDraftsTable.failureReason} TEXT,
+        ${DiaryDraftsTable.createdAt} TEXT NOT NULL,
+        ${DiaryDraftsTable.updatedAt} TEXT NOT NULL
       )
     ''');
   }
