@@ -4,6 +4,7 @@ import 'app_database.dart';
 import 'diary_database.dart';
 import 'diary_draft_database.dart';
 import 'settings_database.dart';
+import 'tracking_database.dart';
 import 'user_database.dart';
 
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
@@ -26,4 +27,8 @@ final settingsDatabaseProvider = Provider<SettingsDatabase>((ref) {
 
 final userDatabaseProvider = Provider<UserDatabase>((ref) {
   return UserDatabase(ref.watch(appDatabaseProvider));
+});
+
+final trackingDatabaseProvider = Provider<TrackingDatabase>((ref) {
+  return TrackingDatabase(ref.watch(appDatabaseProvider));
 });

@@ -47,6 +47,16 @@ class SettingsDatabase {
     }, conflictAlgorithm: ConflictAlgorithm.abort);
   }
 
+  // Saves a setting whether or not it already exists.
+  Future<void> setSetting(String settingName, String value) async {
+    _validateSettingName(settingName);
+    final database = await _appDatabase.database;
+    await database.insert(SettingsTable.name, {
+      SettingsTable.setting: settingName,
+      SettingsTable.value: value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   // Deletes a setting when it exists.
   Future<void> deleteSetting(String settingName) async {
     _validateSettingName(settingName);

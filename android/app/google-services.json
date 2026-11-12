@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "615698325646",
+    "project_id": "chronologe-test",
+    "storage_bucket": "chronologe-test.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:615698325646:android:3a97b8f26dc6de5b1da9df",
+        "android_client_info": {
+          "package_name": "com.example.chronologe"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "615698325646-h9k59plio4fcvsit4vpm9ca0edb2fk5m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.chronologe",
+            "certificate_hash": "a515b12dddc767a35268ad78de8d0100091024c9"
+          }
+        },
+        {
+          "client_id": "615698325646-t99a6ja9oagha0tl6hh3nqfju1a2aapf.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB47WRhgKbb1NB4gf7hSSDDWr7IzFX30HA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "615698325646-t99a6ja9oagha0tl6hh3nqfju1a2aapf.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "615698325646-eiufbt9ud15i2a0rboofv52f8lj319a4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.chronologe"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

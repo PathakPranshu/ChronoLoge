@@ -1,0 +1,682 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+
+import '../../../core/constants/media_constants.dart';
+import '../../../core/database/database_providers.dart';
+import '../../../core/database/database_constants.dart';
+import '../../../core/database/diary_database.dart';
+import '../../../core/database/settings_database.dart';
+import '../../../core/database/tracking_database.dart';
+import '../../../core/services/media_encryption_provider.dart';
+import '../../../core/services/media_encryption_service.dart';
+import '../../../core/services/weather_location_service.dart';
+import '../../../core/utils/display_helpers.dart';
+import '../../../core/utils/file_helpers.dart';
+import '../../settings/models/app_settings.dart';
+import '../../settings/viewmodels/settings_view_model.dart';
+
+final todayViewModelProvider =
+    AsyncNotifierProvider<TodayViewModel, TodayState>(TodayViewModel.new);
+
+/// One event displayed in Today's automatic timeline.
+class TimelineItem {
+  const TimelineItem({
+    required this.id,
+    required this.occurredAt,
+    required this.text,
+    required this.mood,
+    required this.imageLocations,
+    required this.voiceMemoLocations,
+    required this.source,
+    required this.locationLabel,
+    required this.weatherLabel,
+  });
+
+  final int id;
+  final DateTime occurredAt;
+  final String text;
+  final String mood;
+  final List<String> imageLocations;
+  final List<String> voiceMemoLocations;
+  final String source;
+  final String locationLabel;
+  final String weatherLabel;
+}
+
+/// Everything the Today page needs to draw itself.
+class TodayState {
+  const TodayState({
+    required this.dateKey,
+    required this.dateLabel,
+    required this.title,
+    required this.text,
+    required this.mood,
+    required this.imageLocations,
+    required this.voiceMemoLocations,
+    required this.timelineItems,
+    this.isAutomaticMode = true,
+    this.locationLabel = 'Finding your location...',
+    this.weatherLabel = 'Loading weather...',
+    this.latitude,
+    this.longitude,
+    this.weatherContext,
+    this.currentStaySince,
+    this.isSavingText = false,
+    this.isPickingImages = false,
+    this.isAddingSnippet = false,
+  });
+
+  final String dateKey;
+  final String dateLabel;
+  final String title;
+  final String text;
+  final String mood;
+  final List<String> imageLocations;
+  final List<String> voiceMemoLocations;
+  final List<TimelineItem> timelineItems;
+  final bool isAutomaticMode;
+  final String locationLabel;
+  final String weatherLabel;
+  final double? latitude;
+  final double? longitude;
+  final WeatherLocation? weatherContext;
+  final DateTime? currentStaySince;
+  final bool isSavingText;
+  final bool isPickingImages;
+  final bool isAddingSnippet;
+
+  TodayState copyWith({
+    String? title,
+    String? text,
+    String? mood,
+    List<String>? imageLocations,
+    List<String>? voiceMemoLocations,
+    List<TimelineItem>? timelineItems,
+    bool? isAutomaticMode,
+    String? locationLabel,
+    String? weatherLabel,
+    double? latitude,
+    double? longitude,
+    WeatherLocation? weatherContext,
+    DateTime? currentStaySince,
+    bool? isSavingText,
+    bool? isPickingImages,
+    bool? isAddingSnippet,
+  }) {
+    return TodayState(
+      dateKey: dateKey,
+      dateLabel: dateLabel,
+      title: title ?? this.title,
+      text: text ?? this.text,
+      mood: mood ?? this.mood,
+      imageLocations: imageLocations ?? this.imageLocations,
+      voiceMemoLocations: voiceMemoLocations ?? this.voiceMemoLocations,
+      timelineItems: timelineItems ?? this.timelineItems,
+      isAutomaticMode: isAutomaticMode ?? this.isAutomaticMode,
+      locationLabel: locationLabel ?? this.locationLabel,
+      weatherLabel: weatherLabel ?? this.weatherLabel,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      weatherContext: weatherContext ?? this.weatherContext,
+      currentStaySince: currentStaySince ?? this.currentStaySince,
+      isSavingText: isSavingText ?? this.isSavingText,
+      isPickingImages: isPickingImages ?? this.isPickingImages,
+      isAddingSnippet: isAddingSnippet ?? this.isAddingSnippet,
+    );
+  }
+}
+
+/// Handles actions from the Today page and keeps TodayState up to date.
+class TodayViewModel extends AsyncNotifier<TodayState> {
+  static const _diaryModeSetting = 'diary_mode';
+  static const _mediaEncryptionMigrationSetting =
+      'media_encryption_migrated_v1';
+
+  final ImagePicker _imagePicker = ImagePicker();
+  final WeatherLocationService _weatherLocationService =
+      const WeatherLocationService();
+
+  DiaryDatabase get _database => ref.read(diaryDatabaseProvider);
+  TrackingDatabase get _trackingDatabase => ref.read(trackingDatabaseProvider);
+  MediaEncryptionService get _mediaEncryption =>
+      ref.read(mediaEncryptionServiceProvider);
+
+  @override
+  Future<TodayState> build() async {
+    final today = DateTime.now();
+    final dateKey = formatDateKey(today);
+    final settingsDatabase = ref.watch(settingsDatabaseProvider);
+    final temperatureUnit = ref.watch(
+      settingsViewModelProvider.select(
+        (settings) =>
+            settings.value?.temperatureUnit ?? TemperatureUnit.celsius,
+      ),
+    );
+    await _recoverLostImages(dateKey);
+    await _encryptLegacyMedia(settingsDatabase);
+    final todayState = await _loadToday(dateKey, today);
+    final storedMode = await settingsDatabase.getSetting(_diaryModeSetting);
+    unawaited(_loadWeatherAfterBuild(dateKey, temperatureUnit));
+    return todayState.copyWith(isAutomaticMode: storedMode != 'manual');
+  }
+
+  Future<void> saveText(String text) async {
+    final current = state.requireValue;
+    state = AsyncData(current.copyWith(text: text, isSavingText: true));
+    try {
+      await _database.changeText(current.dateKey, text);
+      final latest = state.requireValue;
+      state = AsyncData(latest.copyWith(text: text, isSavingText: false));
+    } catch (_) {
+      final latest = state.requireValue;
+      state = AsyncData(latest.copyWith(isSavingText: false));
+      rethrow;
+    }
+  }
+
+  Future<void> saveManualContent({
+    required String title,
+    required String text,
+  }) async {
+    final current = state.requireValue;
+    state = AsyncData(
+      current.copyWith(title: title, text: text, isSavingText: true),
+    );
+    try {
+      await _database.changeManualContent(
+        current.dateKey,
+        title: title.trim(),
+        textData: text,
+      );
+      final latest = state.requireValue;
+      state = AsyncData(
+        latest.copyWith(title: title.trim(), text: text, isSavingText: false),
+      );
+    } catch (_) {
+      state = AsyncData(state.requireValue.copyWith(isSavingText: false));
+      rethrow;
+    }
+  }
+
+  Future<void> addSnippet({
+    required DateTime occurredAt,
+    required String text,
+    required String mood,
+    required List<XFile> images,
+    required List<String> voiceMemoLocations,
+    required String locationLabel,
+    required String weatherLabel,
+  }) async {
+    final current = state.requireValue;
+    if (current.isAddingSnippet) return;
+
+    state = AsyncData(current.copyWith(isAddingSnippet: true));
+    final storedImages = <String>[];
+    var savedToDatabase = false;
+    try {
+      storedImages.addAll(await _copySnippetImages(current.dateKey, images));
+      await _mediaEncryption.encryptFiles(voiceMemoLocations);
+      final locationSnapshotId = await _saveLocationSnapshot(
+        current,
+        occurredAt,
+        locationLabel,
+      );
+      final weatherSnapshotId = await _saveWeatherSnapshot(
+        current,
+        weatherLabel,
+      );
+      await _database.addTimelineItem(
+        current.dateKey,
+        occurredAt: occurredAt,
+        textData: text.trim(),
+        mood: mood,
+        media: _mediaInputs(storedImages, voiceMemoLocations),
+        locationSnapshotId: locationSnapshotId,
+        weatherSnapshotId: weatherSnapshotId,
+      );
+      savedToDatabase = true;
+      await _reloadEntry(current.dateKey);
+    } catch (_) {
+      if (!savedToDatabase) {
+        for (final location in [...storedImages, ...voiceMemoLocations]) {
+          await deleteFileIfPresent(location);
+        }
+      }
+      final latest = state.value;
+      if (latest != null) {
+        state = AsyncData(latest.copyWith(isAddingSnippet: false));
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> updateSnippet({
+    required TimelineItem original,
+    required String text,
+    required String mood,
+    required List<String> retainedImageLocations,
+    required List<XFile> newImages,
+    required List<String> retainedVoiceMemoLocations,
+    required List<String> newVoiceMemoLocations,
+  }) async {
+    final current = state.requireValue;
+    if (current.isAddingSnippet) return;
+
+    state = AsyncData(current.copyWith(isAddingSnippet: true));
+    final copiedImages = <String>[];
+    var savedToDatabase = false;
+    try {
+      copiedImages.addAll(await _copySnippetImages(current.dateKey, newImages));
+      await _mediaEncryption.encryptFiles(newVoiceMemoLocations);
+      final finalImages = [...retainedImageLocations, ...copiedImages];
+      final finalVoiceMemos = [
+        ...retainedVoiceMemoLocations,
+        ...newVoiceMemoLocations,
+      ];
+      await _database.updateTimelineItem(
+        original.id,
+        date: current.dateKey,
+        textData: text.trim(),
+        mood: mood,
+        media: _mediaInputs(finalImages, finalVoiceMemos),
+      );
+      savedToDatabase = true;
+
+      final removedLocations = <String>[
+        ...original.imageLocations.where(
+          (location) => !retainedImageLocations.contains(location),
+        ),
+        ...original.voiceMemoLocations.where(
+          (location) => !retainedVoiceMemoLocations.contains(location),
+        ),
+      ];
+      for (final location in removedLocations) {
+        await deleteFileIfPresent(location);
+      }
+      await _reloadEntry(current.dateKey);
+    } catch (_) {
+      if (!savedToDatabase) {
+        for (final location in [...copiedImages, ...newVoiceMemoLocations]) {
+          await deleteFileIfPresent(location);
+        }
+      }
+      final latest = state.value;
+      if (latest != null) {
+        state = AsyncData(latest.copyWith(isAddingSnippet: false));
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> deleteSnippet(TimelineItem item) async {
+    final current = state.requireValue;
+    await _database.deleteTimelineItem(item.id, current.dateKey);
+    for (final location in [
+      ...item.imageLocations,
+      ...item.voiceMemoLocations,
+    ]) {
+      await deleteFileIfPresent(location);
+    }
+    await _reloadEntry(current.dateKey);
+  }
+
+  Future<void> setMood(String mood) async {
+    final current = state.requireValue;
+    await _database.changeMood(current.dateKey, mood);
+    state = AsyncData(state.requireValue.copyWith(mood: mood));
+  }
+
+  Future<void> setAutomaticMode(bool isAutomatic) async {
+    final settings = ref.read(settingsDatabaseProvider);
+    final value = isAutomatic ? 'auto' : 'manual';
+    await settings.setSetting(_diaryModeSetting, value);
+    state = AsyncData(
+      state.requireValue.copyWith(isAutomaticMode: isAutomatic),
+    );
+  }
+
+  Future<void> pickImages() async {
+    final current = state.requireValue;
+    if (current.isPickingImages) return;
+
+    state = AsyncData(current.copyWith(isPickingImages: true));
+    try {
+      final images = await _imagePicker.pickMultiImage(
+        maxWidth: diaryImageMaxDimension,
+        maxHeight: diaryImageMaxDimension,
+        imageQuality: diaryImageQuality,
+        limit: 10,
+        requestFullMetadata: false,
+      );
+      if (images.isNotEmpty) {
+        await _storePickedImages(current.dateKey, images);
+      }
+    } finally {
+      await _reloadEntry(current.dateKey);
+    }
+  }
+
+  Future<void> deleteImage(String imageLocation) async {
+    final current = state.requireValue;
+    await _database.deleteImage(current.dateKey, imageLocation);
+    await deleteFileIfPresent(imageLocation);
+    await _reloadEntry(current.dateKey);
+  }
+
+  Future<void> deleteVoiceMemo(String audioLocation) async {
+    final current = state.requireValue;
+    await _database.deleteVoiceMemo(current.dateKey, audioLocation);
+    await deleteFileIfPresent(audioLocation);
+    await _reloadEntry(current.dateKey);
+  }
+
+  Future<void> addVoiceMemo(String audioLocation) async {
+    final current = state.requireValue;
+    try {
+      await _mediaEncryption.encryptFile(audioLocation);
+      await _database.addVoiceMemo(current.dateKey, audioLocation);
+    } catch (_) {
+      await deleteFileIfPresent(audioLocation);
+      rethrow;
+    }
+    await _reloadEntry(current.dateKey);
+  }
+
+  void refresh() => ref.invalidateSelf();
+
+  Future<void> _encryptLegacyMedia(SettingsDatabase settingsDatabase) async {
+    if (await settingsDatabase.getSetting(_mediaEncryptionMigrationSetting) ==
+        'true') {
+      return;
+    }
+    await _mediaEncryption.encryptFiles(await _database.getAllMediaLocations());
+    await settingsDatabase.setSetting(_mediaEncryptionMigrationSetting, 'true');
+  }
+
+  Future<void> _reloadEntry(String dateKey) async {
+    final current = state.requireValue;
+    final refreshed = await _loadToday(dateKey, DateTime.now());
+    state = AsyncData(
+      refreshed.copyWith(
+        locationLabel: current.locationLabel,
+        weatherLabel: current.weatherLabel,
+        latitude: current.latitude,
+        longitude: current.longitude,
+        weatherContext: current.weatherContext,
+        isAutomaticMode: current.isAutomaticMode,
+        isSavingText: current.isSavingText,
+      ),
+    );
+  }
+
+  Future<TodayState> _loadToday(String dateKey, DateTime date) async {
+    final entry = await _database.getEntry(dateKey, readOnly: true);
+    final timelineRows = await _database.getTimelineItems(dateKey);
+    final activeVisit = await _trackingDatabase.getActiveVisit();
+    final activeTrip = activeVisit == null
+        ? await _trackingDatabase.getActiveTrip()
+        : null;
+    final currentStaySince = activeVisit == null
+        ? activeTrip == null
+              ? _stayStartFromTimeline(timelineRows)
+              : null
+        : DateTime.tryParse(activeVisit[VisitsTable.arrivedAt] as String? ?? '')
+              ?.toLocal();
+    final images = (entry?['images_loc'] as List<Object?>? ?? const [])
+        .whereType<String>()
+        .toList(growable: false);
+    final voiceMemos = (entry?['voice_memos_loc'] as List<Object?>? ?? const [])
+        .whereType<String>()
+        .toList(growable: false);
+    final timelineMedia = timelineRows.expand<String>((row) sync* {
+      for (final media in _timelineMedia(row)) {
+        final location = media['location'];
+        if (location is String) yield location;
+      }
+    });
+    await _mediaEncryption.encryptFiles([
+      ...images,
+      ...voiceMemos,
+      ...timelineMedia,
+    ]);
+
+    return TodayState(
+      dateKey: dateKey,
+      dateLabel: formatFriendlyDate(date),
+      title: entry?['title'] as String? ?? '',
+      text: entry?['text_data'] as String? ?? '',
+      mood: entry?['mood'] as String? ?? '',
+      imageLocations: images,
+      voiceMemoLocations: voiceMemos,
+      currentStaySince: currentStaySince,
+      timelineItems: timelineRows
+          .map(
+            (row) => TimelineItem(
+              id: row['id']! as int,
+              occurredAt:
+                  DateTime.tryParse(row['occurred_at']! as String)?.toLocal() ??
+                  date,
+              text: _displayTimelineText(row['text_data'] as String? ?? ''),
+              mood: row['mood'] as String? ?? '',
+              imageLocations: _timelineMediaLocations(
+                row,
+                DiaryMediaTable.imageType,
+              ),
+              voiceMemoLocations: _timelineMediaLocations(
+                row,
+                DiaryMediaTable.voiceMemoType,
+              ),
+              source: row['source'] as String? ?? 'snippet',
+              locationLabel: row['location_label'] as String? ?? '',
+              weatherLabel: row['weather_label'] as String? ?? '',
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  // Uses today's latest arrival or baseline until movement is detected.
+  DateTime? _stayStartFromTimeline(List<DiaryEntryMap> rows) {
+    for (final row in rows.reversed) {
+      final eventType = row['event_type'] as String? ?? '';
+      if (eventType == 'departure') return null;
+      if (eventType == 'arrival' ||
+          eventType == 'new_place' ||
+          eventType == 'day_baseline') {
+        return DateTime.tryParse(row['occurred_at'] as String? ?? '')
+            ?.toLocal();
+      }
+    }
+    return null;
+  }
+
+  // Keeps older baseline rows consistent with the current wording.
+  String _displayTimelineText(String text) {
+    return text == 'Started tracking today'
+        ? 'Recording your diary for today'
+        : text;
+  }
+
+  Future<void> _loadWeatherAfterBuild(
+    String dateKey,
+    TemperatureUnit temperatureUnit,
+  ) async {
+    await Future<void>.delayed(Duration.zero);
+    final weatherLocation = await _weatherLocationService.loadCurrent(
+      useFahrenheit: temperatureUnit == TemperatureUnit.fahrenheit,
+    );
+    final current = state.value;
+    if (current == null || current.dateKey != dateKey) return;
+    state = AsyncData(
+      current.copyWith(
+        locationLabel: weatherLocation.location,
+        weatherLabel: weatherLocation.weather,
+        latitude: weatherLocation.latitude,
+        longitude: weatherLocation.longitude,
+        weatherContext: weatherLocation,
+      ),
+    );
+  }
+
+  Future<void> _recoverLostImages(String dateKey) async {
+    if (!Platform.isAndroid) return;
+
+    final lostData = await _imagePicker.retrieveLostData();
+    final images = lostData.files;
+    if (!lostData.isEmpty && images != null && images.isNotEmpty) {
+      await _storePickedImages(dateKey, images);
+    }
+  }
+
+  Future<void> _storePickedImages(String dateKey, List<XFile> images) async {
+    final documentsDirectory = await getApplicationDocumentsDirectory();
+    final imageDirectory = Directory(
+      path.join(documentsDirectory.path, 'diary_images', dateKey),
+    );
+    await imageDirectory.create(recursive: true);
+
+    for (var index = 0; index < images.length; index++) {
+      final image = images[index];
+      final extension = path.extension(image.path).toLowerCase();
+      final safeExtension = extension.isEmpty ? '.jpg' : extension;
+      final fileName =
+          '${DateTime.now().microsecondsSinceEpoch}_$index$safeExtension';
+      final destination = path.join(imageDirectory.path, fileName);
+
+      try {
+        await image.saveTo(destination);
+        await _mediaEncryption.encryptFile(destination);
+        await _database.addImage(dateKey, destination);
+      } catch (_) {
+        await deleteFileIfPresent(destination);
+        rethrow;
+      }
+    }
+  }
+
+  Future<List<String>> _copySnippetImages(
+    String dateKey,
+    List<XFile> images,
+  ) async {
+    if (images.isEmpty) return const [];
+
+    final documentsDirectory = await getApplicationDocumentsDirectory();
+    final imageDirectory = Directory(
+      path.join(documentsDirectory.path, 'diary_images', dateKey, 'snippets'),
+    );
+    await imageDirectory.create(recursive: true);
+
+    final storedLocations = <String>[];
+    for (var index = 0; index < images.length; index++) {
+      final image = images[index];
+      final extension = path.extension(image.path).toLowerCase();
+      final safeExtension = extension.isEmpty ? '.jpg' : extension;
+      final destination = path.join(
+        imageDirectory.path,
+        '${DateTime.now().microsecondsSinceEpoch}_$index$safeExtension',
+      );
+      try {
+        await image.saveTo(destination);
+        await _mediaEncryption.encryptFile(destination);
+        storedLocations.add(destination);
+      } catch (_) {
+        await deleteFileIfPresent(destination);
+        rethrow;
+      }
+    }
+    return storedLocations;
+  }
+
+  // Saves the location shown in the snippet dialog as a permanent snapshot.
+  Future<int?> _saveLocationSnapshot(
+    TodayState current,
+    DateTime occurredAt,
+    String locationLabel,
+  ) async {
+    final latitude = current.latitude;
+    final longitude = current.longitude;
+    if (latitude == null || longitude == null) return null;
+
+    final cleanLabel = _usableContextLabel(locationLabel);
+    final fallbackLabel =
+        '${latitude.toStringAsFixed(4)}, '
+        '${longitude.toStringAsFixed(4)}';
+    return _trackingDatabase.addLocationSnapshot(
+      recordedAt: occurredAt,
+      latitude: latitude,
+      longitude: longitude,
+      locationLabel: cleanLabel.isEmpty ? fallbackLabel : cleanLabel,
+    );
+  }
+
+  // Saves the current structured weather data and its display label.
+  Future<int?> _saveWeatherSnapshot(
+    TodayState current,
+    String weatherLabel,
+  ) async {
+    final latitude = current.latitude;
+    final longitude = current.longitude;
+    final weather = current.weatherContext?.snapshot;
+    if (latitude == null || longitude == null || weather == null) return null;
+
+    return _trackingDatabase.addWeatherSnapshot(
+      observedAt: weather.observedAt,
+      retrievedAt: DateTime.now(),
+      latitude: latitude,
+      longitude: longitude,
+      temperatureCelsius: weather.temperature,
+      apparentTemperatureCelsius: weather.apparentTemperature,
+      precipitationMm: weather.precipitation,
+      cloudCoverPercent: weather.cloudCover,
+      windSpeedKph: weather.windSpeed,
+      weatherCode: weather.weatherCode,
+      weatherLabel: _usableContextLabel(weatherLabel),
+    );
+  }
+
+  // Converts image and audio paths into the generic database media format.
+  List<DiaryMediaInput> _mediaInputs(
+    List<String> imageLocations,
+    List<String> voiceMemoLocations,
+  ) {
+    return [
+      for (final location in imageLocations)
+        DiaryMediaInput(location: location, type: DiaryMediaTable.imageType),
+      for (final location in voiceMemoLocations)
+        DiaryMediaInput(
+          location: location,
+          type: DiaryMediaTable.voiceMemoType,
+        ),
+    ];
+  }
+
+  String _usableContextLabel(String label) {
+    const unavailable = {
+      'Finding your location...',
+      'Loading weather...',
+      'Location unavailable',
+      'Weather unavailable',
+      'Location permission needed',
+      'Location is turned off',
+    };
+    return unavailable.contains(label) ? '' : label;
+  }
+
+  Iterable<Map<String, Object?>> _timelineMedia(DiaryEntryMap row) {
+    return (row['media'] as List<Object?>? ?? const [])
+        .whereType<Map<String, Object?>>();
+  }
+
+  List<String> _timelineMediaLocations(DiaryEntryMap row, String mediaType) {
+    return _timelineMedia(row)
+        .where((media) => media['type'] == mediaType)
+        .map((media) => media['location'])
+        .whereType<String>()
+        .toList(growable: false);
+  }
+}

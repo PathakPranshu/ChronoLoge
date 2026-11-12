@@ -1,10 +1,21 @@
 import 'package:sqflite_sqlcipher/sqflite.dart';
 
+import '../utils/display_helpers.dart';
 import 'app_database.dart';
 import 'database_constants.dart';
 
 typedef DiaryEntryMap = Map<String, Object?>;
 
+class DiaryMediaInput {
+  const DiaryMediaInput({required this.location, required this.type});
+
+  final String location;
+  final String type;
+}
+
+/// Contains all SQLite queries for diary entries, timeline events, and media.
+///
+/// Views never run SQL directly. They call a view model, which calls this class.
 class DiaryDatabase {
   // Creates a diary data-access layer backed by the shared app database.
   const DiaryDatabase(this._appDatabase);
@@ -12,11 +23,11 @@ class DiaryDatabase {
   final AppDatabase _appDatabase;
 
   // Returns a saved entry or an empty editable entry when one does not exist.
+  // A trashed entry must be restored before it can be edited.
   Future<DiaryEntryMap?> getEntry(String date, {bool readOnly = false}) async {
     final entry = await readEntry(date);
     if (entry != null || readOnly) return entry;
 
-    // Do not silently create an editable entry for a diary in the Recycle Bin.
     final database = await _appDatabase.database;
     final trashedRows = await database.query(
       DiaryEntriesTable.name,
@@ -36,7 +47,7 @@ class DiaryDatabase {
     return _emptyEntry(date);
   }
 
-  // Reads an active saved entry without creating a default entry.
+  // Reads a saved entry for a date without creating a default entry.
   Future<DiaryEntryMap?> readEntry(String date) async {
     final database = await _appDatabase.database;
     final rows = await database.query(
@@ -50,8 +61,7 @@ class DiaryDatabase {
 
     if (rows.isEmpty) return null;
 
-    final imageLocations = await _getImageLocations(database, date);
-    return _entryFromRow(rows.single, imageLocations);
+    return _entryFromRow(rows.single, await _getEntryMedia(database, date));
   }
 
   // Updates the diary text for a date, creating the entry when necessary.
@@ -69,59 +79,323 @@ class DiaryDatabase {
     return _changeValue(date, DiaryEntriesTable.mood, mood);
   }
 
-  // Writes one supported entry column inside a transaction.
-  Future<void> _changeValue(String date, String column, String value) async {
+  // Updates the manual title and text together, creating the entry if needed.
+  Future<void> changeManualContent(
+    String date, {
+    required String title,
+    required String textData,
+  }) async {
     final database = await _appDatabase.database;
-
     await database.transaction((transaction) async {
       await _ensureEntry(transaction, date);
-
       await transaction.update(
         DiaryEntriesTable.name,
-        {column: value, DiaryEntriesTable.updatedAt: _timestamp()},
-        where:
-            '${DiaryEntriesTable.date} = ? AND '
-            '${DiaryEntriesTable.deletedAt} IS NULL',
+        {
+          DiaryEntriesTable.title: title,
+          DiaryEntriesTable.textData: textData,
+          DiaryEntriesTable.updatedAt: _timestamp(),
+          DiaryEntriesTable.deletedAt: null,
+        },
+        where: '${DiaryEntriesTable.date} = ?',
         whereArgs: [date],
       );
     });
   }
 
-  // Adds an ordered image location to an active entry.
-  Future<void> addImage(String date, String imageLocation) async {
+  // Adds one timestamped item to the automatic diary timeline.
+  Future<int> addTimelineItem(
+    String date, {
+    required DateTime occurredAt,
+    required String textData,
+    required String mood,
+    List<DiaryMediaInput> media = const [],
+    String source = 'snippet',
+    String eventType = 'note',
+    int? locationSnapshotId,
+    int? placeId,
+    int? visitId,
+    int? tripId,
+    int? weatherSnapshotId,
+    double confidence = 1,
+  }) async {
     final database = await _appDatabase.database;
-
-    await database.transaction((transaction) async {
+    return database.transaction((transaction) async {
       await _ensureEntry(transaction, date);
-
-      final result = await transaction.rawQuery(
-        '''
-        SELECT COALESCE(MAX(${DiaryImagesTable.sortOrder}), -1) + 1
-          AS next_order
-        FROM ${DiaryImagesTable.name}
-        WHERE ${DiaryImagesTable.entryDate} = ?
-      ''',
-        [date],
+      final id = await transaction.insert(DiaryTimelineItemsTable.name, {
+        DiaryTimelineItemsTable.entryDate: date,
+        DiaryTimelineItemsTable.occurredAt: occurredAt
+            .toUtc()
+            .toIso8601String(),
+        DiaryTimelineItemsTable.textData: textData,
+        DiaryTimelineItemsTable.mood: mood,
+        DiaryTimelineItemsTable.source: source,
+        DiaryTimelineItemsTable.eventType: eventType,
+        DiaryTimelineItemsTable.locationSnapshotId: locationSnapshotId,
+        DiaryTimelineItemsTable.placeId: placeId,
+        DiaryTimelineItemsTable.visitId: visitId,
+        DiaryTimelineItemsTable.tripId: tripId,
+        DiaryTimelineItemsTable.weatherSnapshotId: weatherSnapshotId,
+        DiaryTimelineItemsTable.confidence: confidence,
+      });
+      await _insertMediaRows(
+        transaction,
+        date: date,
+        timelineItemId: id,
+        media: media,
       );
+      await _touchEntry(transaction, date);
+      return id;
+    });
+  }
 
-      final nextOrder = result.single['next_order'] as int;
+  // Checks whether a particular automatic event was already saved today.
+  Future<bool> hasTimelineEvent(String date, String eventType) async {
+    final database = await _appDatabase.database;
+    final rows = await database.query(
+      DiaryTimelineItemsTable.name,
+      columns: [DiaryTimelineItemsTable.id],
+      where:
+          '${DiaryTimelineItemsTable.entryDate} = ? AND '
+          '${DiaryTimelineItemsTable.eventType} = ?',
+      whereArgs: [date, eventType],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
 
-      await transaction.insert(DiaryImagesTable.name, {
-        DiaryImagesTable.entryDate: date,
-        DiaryImagesTable.imageLocation: imageLocation,
-        DiaryImagesTable.sortOrder: nextOrder,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  // Adds an imported event once, or refreshes it when the same source is seen again.
+  Future<int> saveImportedTimelineItem(
+    String date, {
+    required DateTime occurredAt,
+    required String textData,
+    required String source,
+    required String eventType,
+  }) async {
+    final database = await _appDatabase.database;
+    return database.transaction((transaction) async {
+      await _ensureEntry(transaction, date);
+      final rows = await transaction.query(
+        DiaryTimelineItemsTable.name,
+        columns: [DiaryTimelineItemsTable.id],
+        where:
+            '${DiaryTimelineItemsTable.entryDate} = ? AND '
+            '${DiaryTimelineItemsTable.source} = ?',
+        whereArgs: [date, source],
+        limit: 1,
+      );
+      final values = <String, Object?>{
+        DiaryTimelineItemsTable.entryDate: date,
+        DiaryTimelineItemsTable.occurredAt: occurredAt
+            .toUtc()
+            .toIso8601String(),
+        DiaryTimelineItemsTable.textData: textData,
+        DiaryTimelineItemsTable.mood: '',
+        DiaryTimelineItemsTable.source: source,
+        DiaryTimelineItemsTable.eventType: eventType,
+        DiaryTimelineItemsTable.confidence: 1.0,
+      };
 
+      late final int id;
+      if (rows.isEmpty) {
+        id = await transaction.insert(DiaryTimelineItemsTable.name, values);
+      } else {
+        id = rows.single[DiaryTimelineItemsTable.id]! as int;
+        await transaction.update(
+          DiaryTimelineItemsTable.name,
+          values,
+          where: '${DiaryTimelineItemsTable.id} = ?',
+          whereArgs: [id],
+        );
+      }
+      await _touchEntry(transaction, date);
+      return id;
+    });
+  }
+
+  // Replaces the editable content and media for one timeline item.
+  Future<void> updateTimelineItem(
+    int id, {
+    required String date,
+    required String textData,
+    required String mood,
+    required List<DiaryMediaInput> media,
+  }) async {
+    final database = await _appDatabase.database;
+    await database.transaction((transaction) async {
+      final updated = await transaction.update(
+        DiaryTimelineItemsTable.name,
+        {
+          DiaryTimelineItemsTable.textData: textData,
+          DiaryTimelineItemsTable.mood: mood,
+        },
+        where:
+            '${DiaryTimelineItemsTable.id} = ? AND '
+            '${DiaryTimelineItemsTable.entryDate} = ?',
+        whereArgs: [id, date],
+      );
+      if (updated == 0) {
+        throw StateError('The timeline item does not exist.');
+      }
+      await transaction.delete(
+        DiaryMediaTable.name,
+        where:
+            '${DiaryMediaTable.entryDate} = ? AND '
+            '${DiaryMediaTable.timelineItemId} = ?',
+        whereArgs: [date, id],
+      );
+      await _insertMediaRows(
+        transaction,
+        date: date,
+        timelineItemId: id,
+        media: media,
+      );
       await _touchEntry(transaction, date);
     });
   }
 
-  // Removes an image location from an active entry.
+  // Deletes one timeline item belonging to the requested diary date.
+  Future<void> deleteTimelineItem(int id, String date) async {
+    final database = await _appDatabase.database;
+    await database.transaction((transaction) async {
+      await transaction.delete(
+        DiaryTimelineItemsTable.name,
+        where:
+            '${DiaryTimelineItemsTable.id} = ? AND '
+            '${DiaryTimelineItemsTable.entryDate} = ?',
+        whereArgs: [id, date],
+      );
+      await _touchEntry(transaction, date);
+    });
+  }
+
+  // Returns a day's automatic timeline in chronological order.
+  Future<List<DiaryEntryMap>> getTimelineItems(String date) async {
+    final database = await _appDatabase.database;
+    final rows = await database.rawQuery(
+      '''
+      SELECT
+        timeline.*,
+        COALESCE(
+          NULLIF(location.${LocationSnapshotsTable.locationLabel}, ''),
+          NULLIF(place.${PlacesTable.nameColumn}, ''),
+          ''
+        ) AS location_label,
+        COALESCE(weather.${WeatherSnapshotsTable.weatherLabel}, '')
+          AS weather_label
+      FROM ${DiaryTimelineItemsTable.name} timeline
+      LEFT JOIN ${LocationSnapshotsTable.name} location
+        ON location.${LocationSnapshotsTable.id} =
+           timeline.${DiaryTimelineItemsTable.locationSnapshotId}
+      LEFT JOIN ${PlacesTable.name} place
+        ON place.${PlacesTable.id} = timeline.${DiaryTimelineItemsTable.placeId}
+      LEFT JOIN ${WeatherSnapshotsTable.name} weather
+        ON weather.${WeatherSnapshotsTable.id} =
+           timeline.${DiaryTimelineItemsTable.weatherSnapshotId}
+      WHERE timeline.${DiaryTimelineItemsTable.entryDate} = ?
+      ORDER BY timeline.${DiaryTimelineItemsTable.occurredAt} ASC
+      ''',
+      [date],
+    );
+    if (rows.isEmpty) return const [];
+
+    final timelineIds = rows
+        .map((row) => row[DiaryTimelineItemsTable.id]! as int)
+        .toList(growable: false);
+    final placeholders = List.filled(timelineIds.length, '?').join(', ');
+    final mediaRows = await database.query(
+      DiaryMediaTable.name,
+      where: '${DiaryMediaTable.timelineItemId} IN ($placeholders)',
+      whereArgs: timelineIds,
+      orderBy:
+          '${DiaryMediaTable.timelineItemId} ASC, '
+          '${DiaryMediaTable.mediaType} ASC, '
+          '${DiaryMediaTable.sortOrder} ASC',
+    );
+    final mediaByTimelineId = <int, List<DiaryEntryMap>>{};
+    for (final mediaRow in mediaRows) {
+      final timelineItemId = mediaRow[DiaryMediaTable.timelineItemId]! as int;
+      mediaByTimelineId
+          .putIfAbsent(timelineItemId, () => [])
+          .add(_mediaFromRow(mediaRow));
+    }
+
+    return rows
+        .map((row) {
+          final id = row[DiaryTimelineItemsTable.id]! as int;
+          return {
+            'id': row[DiaryTimelineItemsTable.id],
+            'date': row[DiaryTimelineItemsTable.entryDate],
+            'occurred_at': row[DiaryTimelineItemsTable.occurredAt],
+            'text_data': row[DiaryTimelineItemsTable.textData],
+            'mood': row[DiaryTimelineItemsTable.mood],
+            'media': mediaByTimelineId[id] ?? const <DiaryEntryMap>[],
+            'source': row[DiaryTimelineItemsTable.source],
+            'location_label': row['location_label'],
+            'weather_label': row['weather_label'],
+            'event_type': row[DiaryTimelineItemsTable.eventType],
+            'location_snapshot_id':
+                row[DiaryTimelineItemsTable.locationSnapshotId],
+            'place_id': row[DiaryTimelineItemsTable.placeId],
+            'visit_id': row[DiaryTimelineItemsTable.visitId],
+            'trip_id': row[DiaryTimelineItemsTable.tripId],
+            'weather_snapshot_id':
+                row[DiaryTimelineItemsTable.weatherSnapshotId],
+            'confidence': row[DiaryTimelineItemsTable.confidence],
+          };
+        })
+        .toList(growable: false);
+  }
+
+  // Writes one supported entry column inside a transaction.
+  Future<void> _changeValue(String date, String column, String value) async {
+    final database = await _appDatabase.database;
+    await database.transaction((transaction) async {
+      await _ensureEntry(transaction, date);
+      await transaction.update(
+        DiaryEntriesTable.name,
+        {
+          column: value,
+          DiaryEntriesTable.updatedAt: _timestamp(),
+          DiaryEntriesTable.deletedAt: null,
+        },
+        where: '${DiaryEntriesTable.date} = ?',
+        whereArgs: [date],
+      );
+    });
+  }
+
+  // Adds an image using the current media table.
+  Future<void> addImage(String date, String imageLocation) {
+    return addEntryMedia(
+      date,
+      location: imageLocation,
+      mediaType: DiaryMediaTable.imageType,
+    );
+  }
+
+  // Removes an image from both current and legacy media storage.
   Future<void> deleteImage(String date, String imageLocation) async {
     final database = await _appDatabase.database;
 
     await database.transaction((transaction) async {
-      final deleted = await transaction.delete(
+      final deletedMedia = await transaction.delete(
+        DiaryMediaTable.name,
+        where:
+            '''
+          ${DiaryMediaTable.entryDate} = ? AND
+          ${DiaryMediaTable.timelineItemId} IS NULL AND
+          ${DiaryMediaTable.mediaLocation} = ? AND
+          ${DiaryMediaTable.mediaType} = ? AND
+          EXISTS (
+            SELECT 1 FROM ${DiaryEntriesTable.name}
+            WHERE ${DiaryEntriesTable.date} = ?
+              AND ${DiaryEntriesTable.deletedAt} IS NULL
+          )
+        ''',
+        whereArgs: [date, imageLocation, DiaryMediaTable.imageType, date],
+      );
+
+      final deletedLegacy = await transaction.delete(
         DiaryImagesTable.name,
         where:
             '''
@@ -130,38 +404,151 @@ class DiaryDatabase {
           EXISTS (
             SELECT 1 FROM ${DiaryEntriesTable.name}
             WHERE ${DiaryEntriesTable.date} = ?
-            AND ${DiaryEntriesTable.deletedAt} IS NULL
+              AND ${DiaryEntriesTable.deletedAt} IS NULL
           )
         ''',
         whereArgs: [date, imageLocation, date],
       );
 
+      if (deletedMedia + deletedLegacy > 0) {
+        await _touchEntry(transaction, date);
+      }
+    });
+  }
+
+  // Adds an ordered voice memo location to the entry for a date.
+  Future<void> addVoiceMemo(String date, String audioLocation) async {
+    return addEntryMedia(
+      date,
+      location: audioLocation,
+      mediaType: DiaryMediaTable.voiceMemoType,
+    );
+  }
+
+  // Removes a voice memo location from the entry for a date.
+  Future<void> deleteVoiceMemo(String date, String audioLocation) async {
+    return deleteEntryMedia(
+      date,
+      location: audioLocation,
+      mediaType: DiaryMediaTable.voiceMemoType,
+    );
+  }
+
+  // Adds one ordered media file of any type to a diary summary.
+  Future<void> addEntryMedia(
+    String date, {
+    required String location,
+    required String mediaType,
+  }) async {
+    if (location.isEmpty || mediaType.isEmpty) {
+      throw ArgumentError('Media location and type must not be empty.');
+    }
+    final database = await _appDatabase.database;
+    await database.transaction((transaction) async {
+      await _ensureEntry(transaction, date);
+      final result = await transaction.rawQuery(
+        '''
+        SELECT COALESCE(MAX(${DiaryMediaTable.sortOrder}), -1) + 1
+          AS next_order
+        FROM ${DiaryMediaTable.name}
+        WHERE ${DiaryMediaTable.entryDate} = ?
+          AND ${DiaryMediaTable.timelineItemId} IS NULL
+          AND ${DiaryMediaTable.mediaType} = ?
+        ''',
+        [date, mediaType],
+      );
+      final nextOrder = result.single['next_order'] as int;
+      await transaction.insert(DiaryMediaTable.name, {
+        DiaryMediaTable.entryDate: date,
+        DiaryMediaTable.timelineItemId: null,
+        DiaryMediaTable.mediaLocation: location,
+        DiaryMediaTable.mediaType: mediaType,
+        DiaryMediaTable.sortOrder: nextOrder,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await _touchEntry(transaction, date);
+    });
+  }
+
+  // Deletes one media file from an active diary summary.
+  Future<void> deleteEntryMedia(
+    String date, {
+    required String location,
+    required String mediaType,
+  }) async {
+    final database = await _appDatabase.database;
+    await database.transaction((transaction) async {
+      final deleted = await transaction.delete(
+        DiaryMediaTable.name,
+        where:
+            '''
+          ${DiaryMediaTable.entryDate} = ? AND
+          ${DiaryMediaTable.timelineItemId} IS NULL AND
+          ${DiaryMediaTable.mediaLocation} = ? AND
+          ${DiaryMediaTable.mediaType} = ? AND
+          EXISTS (
+            SELECT 1 FROM ${DiaryEntriesTable.name}
+            WHERE ${DiaryEntriesTable.date} = ?
+              AND ${DiaryEntriesTable.deletedAt} IS NULL
+          )
+        ''',
+        whereArgs: [date, location, mediaType, date],
+      );
       if (deleted > 0) {
         await _touchEntry(transaction, date);
       }
     });
   }
 
-  // Returns active diary entries ordered from newest to oldest.
+  // Returns every saved diary entry ordered from newest to oldest.
   Future<List<DiaryEntryMap>> getAllEntriesNewestFirst() async {
     final database = await _appDatabase.database;
-
     final rows = await database.query(
       DiaryEntriesTable.name,
       where: '${DiaryEntriesTable.deletedAt} IS NULL',
       orderBy: '${DiaryEntriesTable.date} DESC',
     );
-
-    return _attachImages(database, rows);
+    return _attachMedia(database, rows);
   }
 
-  // Searches active diary dates, titles, text, and moods.
+  // Returns every persisted media path, including legacy diary images.
+  Future<List<String>> getAllMediaLocations() async {
+    final database = await _appDatabase.database;
+    final mediaRows = await database.query(
+      DiaryMediaTable.name,
+      columns: [DiaryMediaTable.mediaLocation],
+    );
+    final legacyRows = await database.query(
+      DiaryImagesTable.name,
+      columns: [DiaryImagesTable.imageLocation],
+    );
+
+    return <String>{
+      ...mediaRows
+          .map((row) => row[DiaryMediaTable.mediaLocation])
+          .whereType<String>(),
+      ...legacyRows
+          .map((row) => row[DiaryImagesTable.imageLocation])
+          .whereType<String>(),
+    }.toList(growable: false);
+  }
+
+  // Checks for any local diary, including timeline-only and trashed entries.
+  Future<bool> hasAnyEntries() async {
+    final database = await _appDatabase.database;
+    final rows = await database.query(
+      DiaryEntriesTable.name,
+      columns: [DiaryEntriesTable.date],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  // Searches manual and automatic diary content using a case-insensitive match.
   Future<List<DiaryEntryMap>> searchDiary(String text) async {
     final searchText = text.trim();
     if (searchText.isEmpty) return [];
 
     final database = await _appDatabase.database;
-
     final rows = await database.query(
       DiaryEntriesTable.name,
       where:
@@ -170,109 +557,150 @@ class DiaryDatabase {
           INSTR(LOWER(${DiaryEntriesTable.date}), LOWER(?)) > 0 OR
           INSTR(LOWER(${DiaryEntriesTable.title}), LOWER(?)) > 0 OR
           INSTR(LOWER(${DiaryEntriesTable.textData}), LOWER(?)) > 0 OR
-          INSTR(LOWER(${DiaryEntriesTable.mood}), LOWER(?)) > 0
+          INSTR(LOWER(${DiaryEntriesTable.mood}), LOWER(?)) > 0 OR
+          EXISTS (
+            SELECT 1
+            FROM ${DiaryTimelineItemsTable.name} timeline
+            WHERE timeline.${DiaryTimelineItemsTable.entryDate} =
+                  ${DiaryEntriesTable.name}.${DiaryEntriesTable.date}
+              AND (
+                INSTR(
+                  LOWER(timeline.${DiaryTimelineItemsTable.textData}), LOWER(?)
+                ) > 0 OR
+                INSTR(
+                  LOWER(timeline.${DiaryTimelineItemsTable.mood}), LOWER(?)
+                ) > 0
+              )
+          )
         )
       ''',
-      whereArgs: List.filled(4, searchText),
+      whereArgs: List.filled(6, searchText),
       orderBy: '${DiaryEntriesTable.date} DESC',
     );
-
-    return _attachImages(database, rows);
+    return _attachMedia(database, rows);
   }
 
-  // Returns active diary entries for the requested month.
+  // Returns one calendar item per day for the requested month.
   Future<List<DiaryEntryMap>> getMonthData(int year, int month) async {
     final firstDate = DateTime(year, month);
     final lastDate = DateTime(year, month + 1, 0);
-
-    final firstDateKey = _dateKey(firstDate);
-    final lastDateKey = _dateKey(lastDate);
-
+    final firstDateKey = formatDateKey(firstDate);
+    final lastDateKey = formatDateKey(lastDate);
     final database = await _appDatabase.database;
-
     final rows = await database.query(
       DiaryEntriesTable.name,
       where:
-          '''
-        ${DiaryEntriesTable.date} BETWEEN ? AND ? AND
-        ${DiaryEntriesTable.deletedAt} IS NULL
-      ''',
+          '${DiaryEntriesTable.date} BETWEEN ? AND ? AND '
+          '${DiaryEntriesTable.deletedAt} IS NULL',
       whereArgs: [firstDateKey, lastDateKey],
     );
-
-    final entries = await _attachImages(database, rows);
-
+    final entries = await _attachMedia(database, rows);
     final entriesByDate = {
       for (final entry in entries) entry['date']! as String: entry,
     };
 
     return List.generate(lastDate.day, (index) {
-      final date = _dateKey(DateTime(year, month, index + 1));
+      final date = formatDateKey(DateTime(year, month, index + 1));
       return {'date': date, 'entry': entriesByDate[date]};
     });
   }
 
-  // Moves an active diary entry to the Recycle Bin.
-  // Its associated images remain preserved.
+  // Moves an entry to Trash, where it remains recoverable for 30 days.
   Future<void> deleteEntry(String date) async {
     final database = await _appDatabase.database;
-    final now = _timestamp();
-
-    await database.update(
+    final timestamp = _timestamp();
+    final changedRows = await database.update(
       DiaryEntriesTable.name,
-      {DiaryEntriesTable.deletedAt: now, DiaryEntriesTable.updatedAt: now},
+      {
+        DiaryEntriesTable.deletedAt: timestamp,
+        DiaryEntriesTable.updatedAt: timestamp,
+      },
       where:
           '${DiaryEntriesTable.date} = ? AND '
           '${DiaryEntriesTable.deletedAt} IS NULL',
       whereArgs: [date],
     );
+    if (changedRows == 0) {
+      throw StateError('No active diary entry exists for $date.');
+    }
   }
 
-  // Returns deleted diary entries, newest deletion first.
-  Future<List<DiaryEntryMap>> getTrashedEntries() async {
-    final database = await _appDatabase.database;
+  // Backward-compatible alias for older callers.
+  Future<List<DiaryEntryMap>> getTrashedEntries() {
+    return getTrashedEntriesNewestFirst();
+  }
 
+  // Returns trashed entries with the most recently deleted item first.
+  Future<List<DiaryEntryMap>> getTrashedEntriesNewestFirst() async {
+    final database = await _appDatabase.database;
     final rows = await database.query(
       DiaryEntriesTable.name,
       where: '${DiaryEntriesTable.deletedAt} IS NOT NULL',
       orderBy: '${DiaryEntriesTable.deletedAt} DESC',
     );
-
-    return _attachImages(database, rows);
+    return _attachMedia(database, rows);
   }
 
-  // Restores a diary entry from the Recycle Bin.
+  // Restores one entry to the calendar, lists, and search results.
   Future<void> restoreEntry(String date) async {
     final database = await _appDatabase.database;
-
     await database.update(
       DiaryEntriesTable.name,
       {
         DiaryEntriesTable.deletedAt: null,
         DiaryEntriesTable.updatedAt: _timestamp(),
       },
-      where:
-          '${DiaryEntriesTable.date} = ? AND '
-          '${DiaryEntriesTable.deletedAt} IS NOT NULL',
+      where: '${DiaryEntriesTable.date} = ?',
       whereArgs: [date],
     );
   }
 
-  // Permanently deletes a trashed diary and its associated images.
-  Future<void> permanentlyDeleteEntry(String date) async {
+  // Permanently deletes one entry and returns its media files for cleanup.
+  Future<List<String>> permanentlyDeleteEntry(String date) async {
     final database = await _appDatabase.database;
-
-    await database.delete(
-      DiaryEntriesTable.name,
-      where:
-          '${DiaryEntriesTable.date} = ? AND '
-          '${DiaryEntriesTable.deletedAt} IS NOT NULL',
-      whereArgs: [date],
-    );
+    return database.transaction((transaction) async {
+      final rows = await transaction.query(
+        DiaryEntriesTable.name,
+        columns: [DiaryEntriesTable.date],
+        where:
+            '${DiaryEntriesTable.date} = ? AND '
+            '${DiaryEntriesTable.deletedAt} IS NOT NULL',
+        whereArgs: [date],
+        limit: 1,
+      );
+      if (rows.isEmpty) return <String>[];
+      return _permanentlyDeleteDates(transaction, [date]);
+    });
   }
 
-  // Permanently removes trashed diary entries older than the given number
-  // of days. The default retention period is 30 days.
+  // Permanently deletes trash older than 30 days and returns its media files.
+  Future<List<String>> deleteExpiredTrash() async {
+    final cutoff = DateTime.now()
+        .toUtc()
+        .subtract(const Duration(days: 30))
+        .toIso8601String();
+    final database = await _appDatabase.database;
+    return database.transaction((transaction) async {
+      final rows = await transaction.query(
+        DiaryEntriesTable.name,
+        columns: [DiaryEntriesTable.date],
+        where:
+            '${DiaryEntriesTable.deletedAt} IS NOT NULL AND '
+            '${DiaryEntriesTable.deletedAt} <= ?',
+        whereArgs: [cutoff],
+      );
+      return _permanentlyDeleteDates(
+        transaction,
+        rows
+            .map((row) => row[DiaryEntriesTable.date])
+            .whereType<String>()
+            .toList(growable: false),
+      );
+    });
+  }
+
+  // Backward-compatible cleanup API for older callers.
+  // Returns the number of expired diary entries removed.
   Future<int> permanentlyDeleteExpiredEntries({int retentionDays = 30}) async {
     if (retentionDays < 0) {
       throw ArgumentError.value(
@@ -282,23 +710,163 @@ class DiaryDatabase {
       );
     }
 
-    final database = await _appDatabase.database;
     final cutoff = DateTime.now()
         .toUtc()
         .subtract(Duration(days: retentionDays))
         .toIso8601String();
+    final database = await _appDatabase.database;
 
-    return database.delete(
+    return database.transaction((transaction) async {
+      final rows = await transaction.query(
+        DiaryEntriesTable.name,
+        columns: [DiaryEntriesTable.date],
+        where:
+            '${DiaryEntriesTable.deletedAt} IS NOT NULL AND '
+            '${DiaryEntriesTable.deletedAt} < ?',
+        whereArgs: [cutoff],
+      );
+      final dates = rows
+          .map((row) => row[DiaryEntriesTable.date])
+          .whereType<String>()
+          .toList(growable: false);
+
+      if (dates.isEmpty) return 0;
+      await _permanentlyDeleteDates(transaction, dates);
+      return dates.length;
+    });
+  }
+
+  // Permanently deletes every entry currently in Trash.
+  Future<List<String>> emptyTrash() async {
+    final database = await _appDatabase.database;
+    return database.transaction((transaction) async {
+      final rows = await transaction.query(
+        DiaryEntriesTable.name,
+        columns: [DiaryEntriesTable.date],
+        where: '${DiaryEntriesTable.deletedAt} IS NOT NULL',
+      );
+      return _permanentlyDeleteDates(
+        transaction,
+        rows
+            .map((row) => row[DiaryEntriesTable.date])
+            .whereType<String>()
+            .toList(growable: false),
+      );
+    });
+  }
+
+  // Removes entry rows and gathers all associated local media paths.
+  Future<List<String>> _permanentlyDeleteDates(
+    DatabaseExecutor database,
+    List<String> dates,
+  ) async {
+    if (dates.isEmpty) return [];
+    final placeholders = List.filled(dates.length, '?').join(', ');
+
+    final mediaRows = await database.query(
+      DiaryMediaTable.name,
+      columns: [DiaryMediaTable.mediaLocation],
+      where: '${DiaryMediaTable.entryDate} IN ($placeholders)',
+      whereArgs: dates,
+    );
+    final legacyRows = await database.query(
+      DiaryImagesTable.name,
+      columns: [DiaryImagesTable.imageLocation],
+      where: '${DiaryImagesTable.entryDate} IN ($placeholders)',
+      whereArgs: dates,
+    );
+
+    final timelineRows = await database.query(
+      DiaryTimelineItemsTable.name,
+      columns: [
+        DiaryTimelineItemsTable.id,
+        DiaryTimelineItemsTable.locationSnapshotId,
+        DiaryTimelineItemsTable.weatherSnapshotId,
+      ],
+      where: '${DiaryTimelineItemsTable.entryDate} IN ($placeholders)',
+      whereArgs: dates,
+    );
+
+    final timelineIds = timelineRows
+        .map((row) => row[DiaryTimelineItemsTable.id])
+        .whereType<int>()
+        .toList(growable: false);
+    final locationSnapshotIds = timelineRows
+        .map((row) => row[DiaryTimelineItemsTable.locationSnapshotId])
+        .whereType<int>()
+        .toSet();
+    final weatherSnapshotIds = timelineRows
+        .map((row) => row[DiaryTimelineItemsTable.weatherSnapshotId])
+        .whereType<int>()
+        .toSet();
+
+    if (timelineIds.isNotEmpty) {
+      final timelinePlaceholders = List.filled(
+        timelineIds.length,
+        '?',
+      ).join(', ');
+      await database.delete(
+        MemoryPromptsTable.name,
+        where:
+            '${MemoryPromptsTable.timelineItemId} '
+            'IN ($timelinePlaceholders)',
+        whereArgs: timelineIds,
+      );
+    }
+
+    await database.delete(
       DiaryEntriesTable.name,
+      where: '${DiaryEntriesTable.date} IN ($placeholders)',
+      whereArgs: dates,
+    );
+
+    await _deleteOrphanSnapshots(
+      database,
+      table: LocationSnapshotsTable.name,
+      idColumn: LocationSnapshotsTable.id,
+      timelineColumn: DiaryTimelineItemsTable.locationSnapshotId,
+      ids: locationSnapshotIds,
+    );
+    await _deleteOrphanSnapshots(
+      database,
+      table: WeatherSnapshotsTable.name,
+      idColumn: WeatherSnapshotsTable.id,
+      timelineColumn: DiaryTimelineItemsTable.weatherSnapshotId,
+      ids: weatherSnapshotIds,
+    );
+
+    return <String>{
+      ...mediaRows
+          .map((row) => row[DiaryMediaTable.mediaLocation])
+          .whereType<String>(),
+      ...legacyRows
+          .map((row) => row[DiaryImagesTable.imageLocation])
+          .whereType<String>(),
+    }.toList(growable: false);
+  }
+
+  // Removes location or weather snapshots no remaining timeline item uses.
+  Future<void> _deleteOrphanSnapshots(
+    DatabaseExecutor database, {
+    required String table,
+    required String idColumn,
+    required String timelineColumn,
+    required Set<int> ids,
+  }) async {
+    if (ids.isEmpty) return;
+    final placeholders = List.filled(ids.length, '?').join(', ');
+    await database.delete(
+      table,
       where:
-          '${DiaryEntriesTable.deletedAt} IS NOT NULL AND '
-          '${DiaryEntriesTable.deletedAt} < ?',
-      whereArgs: [cutoff],
+          '$idColumn IN ($placeholders) AND NOT EXISTS ('
+          'SELECT 1 FROM ${DiaryTimelineItemsTable.name} timeline '
+          'WHERE timeline.$timelineColumn = $table.$idColumn)',
+      whereArgs: ids.toList(growable: false),
     );
   }
 
-  // Combines entry rows with their ordered image locations.
-  Future<List<DiaryEntryMap>> _attachImages(
+  // Combines current media rows and legacy image rows for diary entries.
+  Future<List<DiaryEntryMap>> _attachMedia(
     DatabaseExecutor database,
     List<Map<String, Object?>> rows,
   ) async {
@@ -308,54 +876,125 @@ class DiaryDatabase {
         rows.map((row) => row[DiaryEntriesTable.date]! as String).toList()
           ..sort();
 
-    final imageRows = await database.query(
+    final mediaRows = await database.query(
+      DiaryMediaTable.name,
+      where:
+          '${DiaryMediaTable.entryDate} BETWEEN ? AND ? AND '
+          '${DiaryMediaTable.timelineItemId} IS NULL',
+      whereArgs: [dates.first, dates.last],
+      orderBy:
+          '${DiaryMediaTable.entryDate} DESC, '
+          '${DiaryMediaTable.mediaType} ASC, '
+          '${DiaryMediaTable.sortOrder} ASC',
+    );
+    final legacyRows = await database.query(
       DiaryImagesTable.name,
       where: '${DiaryImagesTable.entryDate} BETWEEN ? AND ?',
       whereArgs: [dates.first, dates.last],
       orderBy:
-          '''
-        ${DiaryImagesTable.entryDate} DESC,
-        ${DiaryImagesTable.sortOrder} ASC
-      ''',
+          '${DiaryImagesTable.entryDate} DESC, '
+          '${DiaryImagesTable.sortOrder} ASC',
     );
 
-    final imagesByDate = <String, List<String>>{};
+    final mediaByDate = <String, List<DiaryEntryMap>>{};
 
-    for (final imageRow in imageRows) {
+    for (final mediaRow in mediaRows) {
+      final date = mediaRow[DiaryMediaTable.entryDate]! as String;
+      mediaByDate.putIfAbsent(date, () => []).add(_mediaFromRow(mediaRow));
+    }
+
+    for (final imageRow in legacyRows) {
       final date = imageRow[DiaryImagesTable.entryDate]! as String;
       final location = imageRow[DiaryImagesTable.imageLocation]! as String;
+      final items = mediaByDate.putIfAbsent(date, () => []);
 
-      imagesByDate.putIfAbsent(date, () => []).add(location);
+      if (!items.any(
+        (item) =>
+            item['type'] == DiaryMediaTable.imageType &&
+            item['location'] == location,
+      )) {
+        items.add({
+          'id': imageRow[DiaryImagesTable.id],
+          'location': location,
+          'type': DiaryMediaTable.imageType,
+          'sort_order': imageRow[DiaryImagesTable.sortOrder] ?? 0,
+        });
+      }
+    }
+
+    for (final items in mediaByDate.values) {
+      items.sort((a, b) {
+        final typeOrder = (a['type'] as String).compareTo(b['type'] as String);
+        if (typeOrder != 0) return typeOrder;
+        final aOrder = (a['sort_order'] as int?) ?? 0;
+        final bOrder = (b['sort_order'] as int?) ?? 0;
+        return aOrder.compareTo(bOrder);
+      });
     }
 
     return rows
         .map((row) {
           final date = row[DiaryEntriesTable.date]! as String;
-          return _entryFromRow(row, imagesByDate[date] ?? const []);
+          return _entryFromRow(row, mediaByDate[date] ?? const []);
         })
         .toList(growable: false);
   }
 
-  // Loads the ordered image locations belonging to one diary entry.
-  Future<List<String>> _getImageLocations(
+  // Loads all summary media, including images from legacy storage.
+  Future<List<DiaryEntryMap>> _getEntryMedia(
     DatabaseExecutor database,
     String date,
   ) async {
     final rows = await database.query(
+      DiaryMediaTable.name,
+      where:
+          '${DiaryMediaTable.entryDate} = ? AND '
+          '${DiaryMediaTable.timelineItemId} IS NULL',
+      whereArgs: [date],
+      orderBy:
+          '${DiaryMediaTable.mediaType} ASC, '
+          '${DiaryMediaTable.sortOrder} ASC',
+    );
+
+    final legacyRows = await database.query(
       DiaryImagesTable.name,
-      columns: [DiaryImagesTable.imageLocation],
       where: '${DiaryImagesTable.entryDate} = ?',
       whereArgs: [date],
       orderBy: '${DiaryImagesTable.sortOrder} ASC',
     );
 
-    return rows
-        .map((row) => row[DiaryImagesTable.imageLocation]! as String)
-        .toList(growable: false);
+    final media = rows.map(_mediaFromRow).toList();
+
+    for (final imageRow in legacyRows) {
+      final location = imageRow[DiaryImagesTable.imageLocation]! as String;
+      if (media.any(
+        (item) =>
+            item['type'] == DiaryMediaTable.imageType &&
+            item['location'] == location,
+      )) {
+        continue;
+      }
+
+      media.add({
+        'id': imageRow[DiaryImagesTable.id],
+        'location': location,
+        'type': DiaryMediaTable.imageType,
+        'sort_order': imageRow[DiaryImagesTable.sortOrder] ?? 0,
+      });
+    }
+
+    media.sort((a, b) {
+      final typeOrder = (a['type'] as String).compareTo(b['type'] as String);
+      if (typeOrder != 0) return typeOrder;
+      final aOrder = (a['sort_order'] as int?) ?? 0;
+      final bOrder = (b['sort_order'] as int?) ?? 0;
+      return aOrder.compareTo(bOrder);
+    });
+
+    return media;
   }
 
-  // Inserts a blank entry when the requested date does not exist.
-  // Prevents accidental editing of an entry currently in the Recycle Bin.
+  // Inserts a blank entry, but never silently revives a trashed diary.
   Future<void> _ensureEntry(DatabaseExecutor database, String date) async {
     final existingRows = await database.query(
       DiaryEntriesTable.name,
@@ -373,7 +1012,6 @@ class DiaryDatabase {
     }
 
     final now = _timestamp();
-
     await database.insert(DiaryEntriesTable.name, {
       DiaryEntriesTable.date: date,
       DiaryEntriesTable.createdAt: now,
@@ -381,29 +1019,74 @@ class DiaryDatabase {
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  // Refreshes the updated timestamp of an active entry.
+  // Refreshes the updated timestamp after an entry-related change.
   Future<void> _touchEntry(DatabaseExecutor database, String date) async {
     await database.update(
       DiaryEntriesTable.name,
       {DiaryEntriesTable.updatedAt: _timestamp()},
-      where:
-          '${DiaryEntriesTable.date} = ? AND '
-          '${DiaryEntriesTable.deletedAt} IS NULL',
+      where: '${DiaryEntriesTable.date} = ?',
       whereArgs: [date],
     );
   }
 
-  // Converts a database row and its images into the public entry map.
+  // Inserts ordered media rows for one timeline item using extensible types.
+  Future<void> _insertMediaRows(
+    DatabaseExecutor database, {
+    required String date,
+    required int timelineItemId,
+    required List<DiaryMediaInput> media,
+  }) async {
+    final nextOrderByType = <String, int>{};
+    for (final item in media) {
+      if (item.location.isEmpty || item.type.isEmpty) {
+        throw ArgumentError('Media location and type must not be empty.');
+      }
+      final sortOrder = nextOrderByType[item.type] ?? 0;
+      await database.insert(DiaryMediaTable.name, {
+        DiaryMediaTable.entryDate: date,
+        DiaryMediaTable.timelineItemId: timelineItemId,
+        DiaryMediaTable.mediaLocation: item.location,
+        DiaryMediaTable.mediaType: item.type,
+        DiaryMediaTable.sortOrder: sortOrder,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      nextOrderByType[item.type] = sortOrder + 1;
+    }
+  }
+
+  // Converts a database media row into its public representation.
+  DiaryEntryMap _mediaFromRow(Map<String, Object?> row) {
+    return {
+      'id': row[DiaryMediaTable.id],
+      'location': row[DiaryMediaTable.mediaLocation],
+      'type': row[DiaryMediaTable.mediaType],
+      'sort_order': row[DiaryMediaTable.sortOrder],
+    };
+  }
+
+  // Combines a diary row with all media attached directly to its summary.
   DiaryEntryMap _entryFromRow(
     Map<String, Object?> row,
-    List<String> imageLocations,
+    List<DiaryEntryMap> media,
   ) {
+    final imageLocations = media
+        .where((item) => item['type'] == DiaryMediaTable.imageType)
+        .map((item) => item['location'])
+        .whereType<String>()
+        .toList(growable: false);
+    final voiceMemoLocations = media
+        .where((item) => item['type'] == DiaryMediaTable.voiceMemoType)
+        .map((item) => item['location'])
+        .whereType<String>()
+        .toList(growable: false);
     return {
       'date': row[DiaryEntriesTable.date],
       'title': row[DiaryEntriesTable.title],
       'text_data': row[DiaryEntriesTable.textData],
+      'media': media,
       'images_loc': imageLocations,
+      'voice_memos_loc': voiceMemoLocations,
       'mood': row[DiaryEntriesTable.mood],
+      'deleted_at': row[DiaryEntriesTable.deletedAt],
     };
   }
 
@@ -413,19 +1096,14 @@ class DiaryDatabase {
       'date': date,
       'title': '',
       'text_data': '',
+      'media': <DiaryEntryMap>[],
       'images_loc': <String>[],
+      'voice_memos_loc': <String>[],
       'mood': '',
+      'deleted_at': null,
     };
   }
 
   // Produces a UTC ISO-8601 timestamp for database audit columns.
   String _timestamp() => DateTime.now().toUtc().toIso8601String();
-
-  // Formats a date as the sortable YYYY-MM-DD database key.
-  String _dateKey(DateTime date) {
-    final year = date.year.toString().padLeft(4, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    return '$year-$month-$day';
-  }
 }

@@ -1,3 +1,4 @@
+
 name: chronologe
 description: "Let your day write itself."
 publish_to: 'none'
@@ -7,37 +8,57 @@ environment:
   sdk: ^3.13.4
 
 dependencies:
-  awesome_notifications: ^0.12.1
-  envied: ^1.3.8
-  firebase_auth: ^6.7.0
-  firebase_core: ^4.15.0
   flutter:
     sdk: flutter
+
+  awesome_notifications: ^0.12.1
+  cryptography: ^2.9.0
+
+  firebase_auth: ^6.7.0
+  firebase_core: ^4.15.0
+  firebase_storage: ^13.6.0
+
+  flutter_map: ^8.3.2
   flutter_riverpod: ^3.4.3
   flutter_secure_storage: ^11.2.0
+
+  geocoding: ^5.0.0
+  geolocator: ^14.1.1
+  go_router: ^18.1.0
+
   google_fonts: ^8.2.1
   google_sign_in: ^7.2.0
-  image_picker: ^1.2.3
+  health: ^13.3.2
+  http: ^1.6.0
+
+  image_picker: ^1.2.4
+  just_audio: ^0.10.6
+  latlong2: ^0.10.1
+
   local_auth: ^3.0.2
+  local_auth_android: ^2.3.0
+  local_auth_darwin: ^2.0.5
+
   path: ^1.9.1
   path_provider: ^2.1.6
-  shared_preferences: ^2.5.5
+  permission_handler: ^12.0.3
+  record: ^7.1.1
+  share_plus: ^13.3.1
   sqflite_sqlcipher: ^3.4.1
-  table_calendar: ^3.2.1
-  go_router: ^18.0.2
+  workmanager: ^0.10.10
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  build_runner: ^2.16.1
-  envied_generator: ^1.3.8
 
 flutter:
   uses-material-design: true
+
   fonts:
     - family: Fraunces
       fonts:
         - asset: assets/fonts/fraunces_variable.ttf
+
   assets:
     - assets/images/google_icon.png
