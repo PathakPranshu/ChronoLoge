@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
-import '../../../../core/themes/theme_controller.dart';
-import 'preferences_viewmodel.dart';
+import '../../shared/providers/theme_mode_provider.dart';
+import '../../shared/diary_font_style.dart';
+import '../../shared/providers/diary_font_provider.dart';
 
 class PreferencesScreen extends ConsumerWidget {
   const PreferencesScreen({super.key});
@@ -103,45 +103,79 @@ class PreferencesScreen extends ConsumerWidget {
                   data: (selectedFont) => Column(
                     children: [
                       _DiaryFontOption(
-                        title: 'Default',
-                        description: 'Elegant and comfortable',
+                        title: DiaryFontStyle.fraunces.label,
+                        description: DiaryFontStyle.fraunces.description,
                         selected: selectedFont == DiaryFontStyle.fraunces,
                         onTap: () => _saveDiaryFont(
                           context,
                           ref,
                           DiaryFontStyle.fraunces,
                         ),
-                        titleStyle: GoogleFonts.fraunces(
-                          fontSize: 29,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black,
+                        titleStyle: DiaryFontStyle.fraunces.titleStyle(
+                          const TextStyle(
+                            fontSize: 29,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black,
+                          ),
                         ),
-                        bodyStyle: GoogleFonts.geist(
-                          fontSize: 15,
-                          height: 1.6,
-                          color: Colors.black,
+                        bodyStyle: DiaryFontStyle.fraunces.bodyStyle(
+                          const TextStyle(
+                            fontSize: 15,
+                            height: 1.6,
+                            color: Colors.black,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
+
                       _DiaryFontOption(
-                        title: 'Fancy',
-                        description: 'Expressive and personal',
+                        title: DiaryFontStyle.literata.label,
+                        description: DiaryFontStyle.literata.description,
                         selected: selectedFont == DiaryFontStyle.literata,
                         onTap: () => _saveDiaryFont(
                           context,
                           ref,
                           DiaryFontStyle.literata,
                         ),
-                        titleStyle: GoogleFonts.literata(
-                          fontSize: 29,
-                          fontStyle: FontStyle.italic,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black,
+                        titleStyle: DiaryFontStyle.literata.titleStyle(
+                          const TextStyle(
+                            fontSize: 29,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black,
+                          ),
                         ),
-                        bodyStyle: GoogleFonts.comicNeue(
-                          fontSize: 17,
-                          height: 1.6,
-                          color: Colors.black,
+                        bodyStyle: DiaryFontStyle.literata.bodyStyle(
+                          const TextStyle(
+                            fontSize: 17,
+                            height: 1.6,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      _DiaryFontOption(
+                        title: DiaryFontStyle.instrument.label,
+                        description: DiaryFontStyle.instrument.description,
+                        selected: selectedFont == DiaryFontStyle.instrument,
+                        onTap: () => _saveDiaryFont(
+                          context,
+                          ref,
+                          DiaryFontStyle.instrument,
+                        ),
+                        titleStyle: DiaryFontStyle.instrument.titleStyle(
+                          const TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black,
+                          ),
+                        ),
+                        bodyStyle: DiaryFontStyle.instrument.bodyStyle(
+                          const TextStyle(
+                            fontSize: 15,
+                            height: 1.6,
+                            color: Colors.black,
+                          ),
                         ),
                       ),
                     ],

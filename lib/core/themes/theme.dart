@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'font_controller.dart';
-
 // Theme for the complete application: colors and typography.
 class CustomTheme {
   // Light mode color scheme.
   static ThemeData lightThemeData(BuildContext context) {
     return ThemeData(
-      textTheme: buildTextTheme(AppFont.geist),
+      textTheme: buildTextTheme(),
       colorScheme: const ColorScheme(
         brightness: Brightness.light,
         primary: Color(0xffa2391a),
@@ -63,7 +61,7 @@ class CustomTheme {
   // Dark mode color scheme.
   static ThemeData darkThemeData(BuildContext context) {
     return ThemeData(
-      textTheme: buildTextTheme(AppFont.geist),
+      textTheme: buildTextTheme(),
       colorScheme: const ColorScheme(
         brightness: Brightness.dark,
         primary: Color(0xffffb5a0),
@@ -115,13 +113,9 @@ class CustomTheme {
     );
   }
 
-  // Text theme.
-  static TextTheme buildTextTheme(AppFont appFont) {
-    final mainFont = switch (appFont) {
-      AppFont.geist => GoogleFonts.geist(),
-      AppFont.roboto => GoogleFonts.roboto(),
-      AppFont.lato => GoogleFonts.lato(),
-    };
+  // Fixed application typography.
+  static TextTheme buildTextTheme() {
+    final mainFont = GoogleFonts.geist();
 
     return TextTheme(
       displayMedium: const TextStyle(

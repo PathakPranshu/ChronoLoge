@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_constants.dart';
 import '../../../core/database/database_providers.dart';
+import '../../settings/shared/diary_font_style.dart';
+import '../../settings/shared/providers/diary_font_provider.dart';
 import '../shared/providers/diary_drafts_provider.dart';
 
 class DraftEditorScreen extends ConsumerStatefulWidget {
@@ -155,6 +157,12 @@ class _DraftEditorScreenState extends ConsumerState<DraftEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final diaryFont =
+        ref.watch(preferencesViewModelProvider).asData?.value ??
+        DiaryFontStyle.fraunces;
+
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Edit Draft')),
       body: FutureBuilder<Map<String, Object?>?>(
@@ -183,15 +191,14 @@ class _DraftEditorScreenState extends ConsumerState<DraftEditorScreen> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                Text(
-                  widget.date,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                Text(widget.date, style: theme.textTheme.titleMedium),
                 const SizedBox(height: 20),
 
                 TextFormField(
                   controller: _titleController,
-                  style: const TextStyle(color: _inputTextColor),
+                  style: diaryFont.titleStyle(
+                    const TextStyle(color: _inputTextColor),
+                  ),
                   cursorColor: _inputTextColor,
                   decoration: const InputDecoration(
                     labelText: 'Diary title',
@@ -203,7 +210,9 @@ class _DraftEditorScreenState extends ConsumerState<DraftEditorScreen> {
 
                 TextFormField(
                   controller: _textController,
-                  style: const TextStyle(color: _inputTextColor),
+                  style: diaryFont.bodyStyle(
+                    const TextStyle(color: _inputTextColor, height: 1.6),
+                  ),
                   cursorColor: _inputTextColor,
                   decoration: const InputDecoration(
                     labelText: 'Diary content',
@@ -293,7 +302,7 @@ class _DraftEditorScreenState extends ConsumerState<DraftEditorScreen> {
                   Text(
                     '${_imageLocations.length} attached image(s) '
                     'will be preserved.',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    style: theme.textTheme.bodyMedium,
                   ),
                 ],
 
@@ -302,9 +311,7 @@ class _DraftEditorScreenState extends ConsumerState<DraftEditorScreen> {
                   const SizedBox(height: 12),
                   Text(
                     'Previous failure: $_failureReason',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+                    style: TextStyle(color: theme.colorScheme.error),
                   ),
                 ],
 

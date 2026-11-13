@@ -3,6 +3,7 @@ abstract final class Routes {
   static const settings = '/settings';
   static const account = '/account';
   static const preferences = '/preferences';
+  static const notifications = '/notifications';
   static const drafts = '/drafts';
   static const draftEditor = '/draft-editor';
   static const diary = '/diary';

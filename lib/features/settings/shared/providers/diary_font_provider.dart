@@ -1,38 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../shared/diary_font_style.dart';
 import '../../shared/providers/settings_provider.dart';
 
 const _diaryFontSettingKey = 'diary_font';
 
-enum DiaryFontStyle {
-  fraunces,
-  literata,
-}
-
-extension DiaryFontStyleDetails on DiaryFontStyle {
-  String get label {
-    switch (this) {
-      case DiaryFontStyle.fraunces:
-        return 'Default';
-      case DiaryFontStyle.literata:
-        return 'Fancy';
-    }
-  }
-
-  String get storageValue => name;
-
-  static DiaryFontStyle fromStorage(String? value) {
-    return DiaryFontStyle.values.firstWhere(
-      (font) => font.storageValue == value,
-      orElse: () => DiaryFontStyle.fraunces,
-    );
-  }
-}
-
 final preferencesViewModelProvider =
     AsyncNotifierProvider<PreferencesViewModel, DiaryFontStyle>(
-  PreferencesViewModel.new,
-);
+      PreferencesViewModel.new,
+    );
 
 class PreferencesViewModel extends AsyncNotifier<DiaryFontStyle> {
   @override
@@ -49,16 +25,14 @@ class PreferencesViewModel extends AsyncNotifier<DiaryFontStyle> {
   }
 
   Future<void> setDiaryFont(DiaryFontStyle font) async {
-    final previousFont =
-        state.asData?.value ?? DiaryFontStyle.fraunces;
+    final previousFont = state.asData?.value ?? DiaryFontStyle.fraunces;
 
     state = AsyncData(font);
 
     try {
-      await ref.read(settingsRepositoryProvider).saveSetting(
-            _diaryFontSettingKey,
-            font.storageValue,
-          );
+      await ref
+          .read(settingsRepositoryProvider)
+          .saveSetting(_diaryFontSettingKey, font.storageValue);
     } catch (_) {
       state = AsyncData(previousFont);
       rethrow;

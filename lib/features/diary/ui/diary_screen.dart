@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../settings/shared/diary_font_style.dart';
+import '../../settings/shared/providers/diary_font_provider.dart';
 import '../shared/providers/diary_entries_provider.dart';
 
 class DiaryScreen extends ConsumerWidget {
@@ -33,7 +35,11 @@ class DiaryScreen extends ConsumerWidget {
     return '${parts[2]} ${months[month - 1]} ${parts[0]}';
   }
 
-  void _showDiary(BuildContext context, Map<String, Object?> entry) {
+  void _showDiary(
+    BuildContext context,
+    Map<String, Object?> entry,
+    DiaryFontStyle diaryFont,
+  ) {
     final date = entry['date'] as String? ?? '';
     final title = (entry['title'] as String? ?? '').trim();
     final textData = (entry['text_data'] as String? ?? '').trim();
@@ -44,6 +50,8 @@ class DiaryScreen extends ConsumerWidget {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) {
+        final theme = Theme.of(context);
+
         return SafeArea(
           child: DraggableScrollableSheet(
             expand: false,
@@ -59,14 +67,16 @@ class DiaryScreen extends ConsumerWidget {
                   children: [
                     Text(
                       _formatDate(date),
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: theme.colorScheme.primary,
                       ),
                     ),
                     const SizedBox(height: 12),
                     Text(
                       title.isNotEmpty ? title : 'Untitled diary',
-                      style: Theme.of(context).textTheme.headlineSmall,
+                      style: diaryFont.titleStyle(
+                        theme.textTheme.headlineSmall,
+                      ),
                     ),
                     if (mood.isNotEmpty) ...[
                       const SizedBox(height: 12),
@@ -74,7 +84,7 @@ class DiaryScreen extends ConsumerWidget {
                         children: [
                           Icon(
                             Icons.mood_outlined,
-                            color: Theme.of(context).colorScheme.primary,
+                            color: theme.colorScheme.primary,
                           ),
                           const SizedBox(width: 8),
                           Text(mood),
@@ -88,8 +98,9 @@ class DiaryScreen extends ConsumerWidget {
                       textData.isNotEmpty
                           ? textData
                           : 'No diary text available.',
-                      style: Theme.of(context).textTheme.bodyLarge
-                          ?.copyWith(height: 1.7),
+                      style: diaryFont.bodyStyle(
+                        theme.textTheme.bodyLarge?.copyWith(height: 1.7),
+                      ),
                     ),
                   ],
                 ),
@@ -104,7 +115,11 @@ class DiaryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final entriesState = ref.watch(diaryEntriesProvider);
+    final diaryFont =
+        ref.watch(preferencesViewModelProvider).asData?.value ??
+        DiaryFontStyle.fraunces;
     final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -132,7 +147,7 @@ class DiaryScreen extends ConsumerWidget {
                 Text(
                   error.toString(),
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: theme.textTheme.bodySmall,
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -159,14 +174,15 @@ class DiaryScreen extends ConsumerWidget {
                     const SizedBox(height: 16),
                     Text(
                       'Your diary is empty',
-                      style: Theme.of(context).textTheme.titleLarge,
+                      style: theme.textTheme.titleLarge,
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Diaries you save will appear here.',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium
-                          ?.copyWith(color: colors.onSurfaceVariant),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -194,7 +210,7 @@ class DiaryScreen extends ConsumerWidget {
               return Card(
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
-                  onTap: () => _showDiary(context, entry),
+                  onTap: () => _showDiary(context, entry, diaryFont),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -210,8 +226,9 @@ class DiaryScreen extends ConsumerWidget {
                             Expanded(
                               child: Text(
                                 _formatDate(date),
-                                style: Theme.of(context).textTheme.labelLarge
-                                    ?.copyWith(color: colors.primary),
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: colors.primary,
+                                ),
                               ),
                             ),
                             const Icon(Icons.chevron_right),
@@ -220,15 +237,20 @@ class DiaryScreen extends ConsumerWidget {
                         const SizedBox(height: 12),
                         Text(
                           title.isNotEmpty ? title : 'Untitled diary',
-                          style: Theme.of(context).textTheme.titleMedium,
+                          style: diaryFont.titleStyle(
+                            theme.textTheme.titleMedium,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           preview,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: colors.onSurfaceVariant),
+                          style: diaryFont.bodyStyle(
+                            theme.textTheme.bodyMedium?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
                         ),
                         if (mood.isNotEmpty || images.isNotEmpty) ...[
                           const SizedBox(height: 12),
@@ -264,8 +286,9 @@ class DiaryScreen extends ConsumerWidget {
                           alignment: Alignment.centerRight,
                           child: Text(
                             'Read diary',
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(color: colors.primary),
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: colors.primary,
+                            ),
                           ),
                         ),
                       ],

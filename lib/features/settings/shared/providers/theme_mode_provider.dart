@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../database/database_providers.dart';
+import 'settings_provider.dart';
 
 const _themeSettingKey = 'theme_mode';
 
@@ -10,6 +10,8 @@ final themeModeProvider = NotifierProvider<ThemeModeController, ThemeMode>(
 );
 
 class ThemeModeController extends Notifier<ThemeMode> {
+  bool _hasUserChanged = false;
+
   @override
   ThemeMode build() {
     _loadSavedTheme();
@@ -18,10 +20,10 @@ class ThemeModeController extends Notifier<ThemeMode> {
 
   Future<void> _loadSavedTheme() async {
     try {
-      final database = ref.read(settingsDatabaseProvider);
-      final savedValue = await database.getSetting(_themeSettingKey);
+      final repository = ref.read(settingsRepositoryProvider);
+      final savedValue = await repository.getSetting(_themeSettingKey);
 
-      if (!ref.mounted) return;
+      if (!ref.mounted || _hasUserChanged) return;
 
       state = switch (savedValue) {
         'light' => ThemeMode.light,
@@ -35,24 +37,21 @@ class ThemeModeController extends Notifier<ThemeMode> {
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
-    final database = ref.read(settingsDatabaseProvider);
     final value = switch (mode) {
       ThemeMode.light => 'light',
       ThemeMode.dark => 'dark',
       ThemeMode.system => 'system',
     };
 
+    _hasUserChanged = true;
+
     final previousMode = state;
     state = mode;
 
     try {
-      final existingValue = await database.getSetting(_themeSettingKey);
-
-      if (existingValue == null) {
-        await database.addSetting(_themeSettingKey, value);
-      } else {
-        await database.changeSetting(_themeSettingKey, value);
-      }
+      await ref
+          .read(settingsRepositoryProvider)
+          .saveSetting(_themeSettingKey, value);
     } catch (_) {
       state = previousMode;
       rethrow;

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../authentication/shared/providers/auth_provider.dart';
-import '../../../core/notifications/notification_settings_controller.dart';
 import '../../../core/routing/routes.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -120,7 +119,7 @@ class SettingsScreen extends ConsumerWidget {
                     if (item.title == 'Preferences') {
                       context.push(Routes.preferences);
                     } else if (item.title == 'Notifications') {
-                      _showNotificationSettings(context);
+                      context.push(Routes.notifications);
                     } else {
                       _showComingSoon(context, item.title);
                     }
@@ -186,61 +185,6 @@ class SettingsScreen extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  // Notification settings
-  void _showNotificationSettings(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => Consumer(
-        builder: (context, dialogRef, _) {
-          final remindersEnabled = dialogRef.watch(
-            dailyRemindersEnabledProvider,
-          );
-
-          return AlertDialog(
-            title: const Text('Daily reminders'),
-            content: SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Enable daily reminders'),
-              subtitle: const Text(
-                'Receive a diary reminder every day at 8:00 PM.',
-              ),
-              value: remindersEnabled,
-              onChanged: (enabled) {
-                _saveNotificationPreference(dialogContext, dialogRef, enabled);
-              },
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Close'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Future<void> _saveNotificationPreference(
-    BuildContext context,
-    WidgetRef ref,
-    bool enabled,
-  ) async {
-    try {
-      await ref
-          .read(dailyRemindersEnabledProvider.notifier)
-          .setEnabled(enabled);
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not update the reminder setting.'),
-          ),
-        );
-      }
-    }
   }
 
   // Coming soon message

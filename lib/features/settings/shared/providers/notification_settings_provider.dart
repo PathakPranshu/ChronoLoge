@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../database/database_providers.dart';
-import 'notification_service.dart';
+import '../../../../core/notifications/notification_service.dart';
+import 'settings_provider.dart';
 
 const _notificationSettingKey = 'daily_reminders_enabled';
 
@@ -11,6 +11,8 @@ final dailyRemindersEnabledProvider =
     );
 
 class DailyRemindersController extends Notifier<bool> {
+  bool _hasUserChanged = false;
+
   @override
   bool build() {
     _loadSavedPreference();
@@ -19,10 +21,10 @@ class DailyRemindersController extends Notifier<bool> {
 
   Future<void> _loadSavedPreference() async {
     try {
-      final database = ref.read(settingsDatabaseProvider);
-      final savedValue = await database.getSetting(_notificationSettingKey);
+      final repository = ref.read(settingsRepositoryProvider);
+      final savedValue = await repository.getSetting(_notificationSettingKey);
 
-      if (!ref.mounted) return;
+      if (!ref.mounted || _hasUserChanged) return;
 
       final enabled = savedValue != 'false';
       state = enabled;
@@ -38,20 +40,14 @@ class DailyRemindersController extends Notifier<bool> {
   }
 
   Future<void> setEnabled(bool enabled) async {
-    final database = ref.read(settingsDatabaseProvider);
+    _hasUserChanged = true;
+
     final previousValue = state;
 
     try {
-      final existingValue = await database.getSetting(_notificationSettingKey);
-
-      if (existingValue == null) {
-        await database.addSetting(_notificationSettingKey, enabled.toString());
-      } else {
-        await database.changeSetting(
-          _notificationSettingKey,
-          enabled.toString(),
-        );
-      }
+      await ref
+          .read(settingsRepositoryProvider)
+          .saveSetting(_notificationSettingKey, enabled.toString());
 
       state = enabled;
 

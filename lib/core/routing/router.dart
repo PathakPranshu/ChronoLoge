@@ -4,10 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../demo.dart';
 import '../../features/settings/ui/settings_screen.dart';
-import '../../features/authentication/shared/providers/auth_provider.dart';
-import '../../features/authentication/shared/providers/secure_storage_provider.dart';
 import '../../features/settings/ui/account/account_screen.dart';
 import '../../features/settings/ui/preferences/preferences_screen.dart';
+import '../../features/settings/ui/notification/notification_settings_screen.dart';
+import '../../features/authentication/shared/providers/auth_provider.dart';
+import '../../features/authentication/shared/providers/secure_storage_provider.dart';
 import '../../features/diary_drafts/ui/drafts_screen.dart';
 import '../../features/diary_drafts/ui/draft_editor_screen.dart';
 import '../../features/diary/ui/diary_screen.dart';
@@ -46,6 +47,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.preferences,
         builder: (context, state) => const PreferencesScreen(),
+      ),
+      GoRoute(
+        path: Routes.notifications,
+        builder: (context, state) => const NotificationSettingsScreen(),
       ),
       GoRoute(
         path: Routes.account,

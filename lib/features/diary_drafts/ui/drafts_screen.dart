@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/database/database_constants.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/routing/routes.dart';
+import '../../settings/shared/diary_font_style.dart';
+import '../../settings/shared/providers/diary_font_provider.dart';
 import '../shared/providers/diary_drafts_provider.dart';
 
 class DraftsScreen extends ConsumerWidget {
@@ -129,7 +131,11 @@ class DraftsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final draftsState = ref.watch(diaryDraftsProvider);
+    final diaryFont =
+        ref.watch(preferencesViewModelProvider).asData?.value ??
+        DiaryFontStyle.fraunces;
     final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -169,7 +175,7 @@ class DraftsScreen extends ConsumerWidget {
                 Text(
                   error.toString(),
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: theme.textTheme.bodySmall,
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -194,16 +200,14 @@ class DraftsScreen extends ConsumerWidget {
                       color: colors.onSurfaceVariant,
                     ),
                     const SizedBox(height: 16),
-                    Text(
-                      'No drafts yet',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
+                    Text('No drafts yet', style: theme.textTheme.titleLarge),
                     const SizedBox(height: 8),
                     Text(
                       'Unfinished or unsaved diaries will appear here.',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium
-                          ?.copyWith(color: colors.onSurfaceVariant),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -261,31 +265,32 @@ class DraftsScreen extends ConsumerWidget {
                             Expanded(
                               child: Text(
                                 statusLabel,
-                                style: Theme.of(context).textTheme.labelLarge
-                                    ?.copyWith(
-                                      color: colors.primary,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: colors.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
-                            Text(
-                              date,
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
+                            Text(date, style: theme.textTheme.bodySmall),
                           ],
                         ),
                         const SizedBox(height: 12),
                         Text(
                           displayTitle,
-                          style: Theme.of(context).textTheme.titleMedium,
+                          style: diaryFont.titleStyle(
+                            theme.textTheme.titleMedium,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           preview,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: colors.onSurfaceVariant),
+                          style: diaryFont.bodyStyle(
+                            theme.textTheme.bodyMedium?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
                         ),
                         if (images.isNotEmpty) ...[
                           const SizedBox(height: 10),
@@ -295,7 +300,7 @@ class DraftsScreen extends ConsumerWidget {
                               const SizedBox(width: 6),
                               Text(
                                 '${images.length} image${images.length == 1 ? '' : 's'}',
-                                style: Theme.of(context).textTheme.bodySmall,
+                                style: theme.textTheme.bodySmall,
                               ),
                             ],
                           ),
@@ -305,8 +310,9 @@ class DraftsScreen extends ConsumerWidget {
                           const SizedBox(height: 10),
                           Text(
                             'Reason: $failureReason',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: colors.error),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colors.error,
+                            ),
                           ),
                         ],
                         const SizedBox(height: 12),

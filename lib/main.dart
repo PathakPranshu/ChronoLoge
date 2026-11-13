@@ -2,10 +2,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/themes/theme_controller.dart';
-import 'core/themes/font_controller.dart';
+import 'features/settings/shared/providers/theme_mode_provider.dart';
 import 'core/notifications/notification_service.dart';
-import 'core/notifications/notification_settings_controller.dart';
+import 'features/settings/shared/providers/notification_settings_provider.dart';
 import 'core/routing/router.dart';
 import 'core/themes/theme.dart';
 import 'firebase_options.dart';
@@ -27,16 +26,13 @@ class MainApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final goRouter = ref.watch(goRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
-    final appFont = ref.watch(appFontProvider);
 
     // Load the saved daily reminder preference.
     ref.watch(dailyRemindersEnabledProvider);
 
     return MaterialApp.router(
-      theme: CustomTheme.lightThemeData(context)
-          .copyWith(textTheme: CustomTheme.buildTextTheme(appFont)),
-      darkTheme: CustomTheme.darkThemeData(context)
-          .copyWith(textTheme: CustomTheme.buildTextTheme(appFont)),
+      theme: CustomTheme.lightThemeData(context),
+      darkTheme: CustomTheme.darkThemeData(context),
       themeMode: themeMode,
       routerConfig: goRouter,
     );
