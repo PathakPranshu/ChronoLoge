@@ -115,7 +115,6 @@ class CustomTheme {
 
   // Fixed application typography.
   static TextTheme buildTextTheme() {
-    final mainFont = GoogleFonts.geist();
 
     return TextTheme(
       displayMedium: const TextStyle(
@@ -136,18 +135,18 @@ class CustomTheme {
           FontVariation('WONK', 0),
         ],
       ),
-      headlineLarge: mainFont,
-      headlineMedium: mainFont,
-      headlineSmall: mainFont,
-      titleLarge: mainFont,
-      titleMedium: mainFont,
-      titleSmall: mainFont.copyWith(fontWeight: FontWeight.w500),
-      labelLarge: mainFont,
-      labelMedium: mainFont,
-      labelSmall: mainFont,
-      bodyLarge: mainFont,
-      bodyMedium: mainFont,
-      bodySmall: mainFont,
+      headlineLarge: GoogleFonts.geist(),
+      headlineMedium: GoogleFonts.geist(),
+      headlineSmall: GoogleFonts.geist(),
+      titleLarge: GoogleFonts.geist(),
+      titleMedium: GoogleFonts.geist(),
+      titleSmall: GoogleFonts.geist().copyWith(fontWeight: FontWeight.w500),
+      labelLarge: GoogleFonts.geist(),
+      labelMedium: GoogleFonts.geist(),
+      labelSmall: GoogleFonts.geist(),
+      bodyLarge: GoogleFonts.geist(),
+      bodyMedium: GoogleFonts.geist(),
+      bodySmall: GoogleFonts.geist(),
     );
   }
 }

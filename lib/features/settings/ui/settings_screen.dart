@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/utils/gradient_rotation_matrix.dart';
 import '../../authentication/shared/providers/auth_provider.dart';
-import '../../../core/routing/routes.dart';
+
+enum TilePosition { first, middle, last, standalone }
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -11,281 +13,406 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+    final colorTheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+    final screenSize = MediaQuery.sizeOf(context);
+
     final authState = ref.watch(authStateProvider);
+    final user = authState.value;
+    final userName = user?.displayName ?? 'User';
+    final userEmail = user?.email ?? 'user@chronologe.app';
+    final userPhotoUrl = user?.photoURL;
+    final userInitial = userName.isNotEmpty ? userName[0].toUpperCase() : 'U';
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar.large(title: const Text('Settings'), pinned: true),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                Text(
-                  'Make ChronoLoge yours.',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
+      body: Stack(
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            width: screenSize.width,
+            height: screenSize.height,
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: colorTheme.surface,
+                  gradient: RadialGradient(
+                    center: const Alignment(0.05, 0.05),
+                    colors: [
+                      colorTheme.primaryFixed.withValues(alpha: 0.2),
+                      colorTheme.surface,
+                    ],
+                    radius: 0.5,
+                    stops: const [0.0, 0.524],
+                    transform: const GradientRotationMatrix(),
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  'Manage your account and how your diary works.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
+              ),
+            ),
+          ),
+
+          CustomScrollView(
+            slivers: [
+              Theme(
+                data: theme.copyWith(
+                  textTheme: textTheme.copyWith(
+                    headlineMedium: textTheme.displaySmall?.copyWith(
+                      color: colorTheme.onSurface,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                child: const SliverAppBar.large(
+                  automaticallyImplyLeading: false,
+                  title: Text("Settings"),
+                ),
+              ),
 
-                // Profile card - opens Account screen
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(24),
-                    onTap: () => context.push(Routes.account),
-                    child: Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: colors.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: colors.outlineVariant),
-                      ),
-                      child: authState.when(
-                        loading: () =>
-                            const Center(child: CircularProgressIndicator()),
-                        error: (_, _) =>
-                            const Text('Unable to load your profile.'),
-                        data: (user) {
-                          final photoUrl = user?.photoURL;
+              // Profile Card and First Header
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
 
-                          return Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 26,
-                                backgroundColor: colors.primaryContainer,
-                                backgroundImage:
-                                    photoUrl != null && photoUrl.isNotEmpty
-                                    ? NetworkImage(photoUrl)
-                                    : null,
-                                child: photoUrl == null || photoUrl.isEmpty
-                                    ? Icon(
-                                        Icons.person_outline,
-                                        color: colors.onPrimaryContainer,
-                                        size: 28,
-                                      )
-                                    : null,
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      user?.displayName ?? 'ChronoLoge user',
-                                      style: theme.textTheme.titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      user?.email ?? 'No email available',
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                            color: colors.onSurfaceVariant,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Icon(
-                                Icons.chevron_right,
-                                color: colors.onSurfaceVariant,
-                              ),
-                            ],
-                          );
+                      // Touchable Profile Card
+                      _ProfileCard(
+                        name: userName,
+                        email: userEmail,
+                        initial: userInitial,
+                        photoUrl: userPhotoUrl,
+                        onTap: () {
+                          context.push("account");
                         },
                       ),
-                    ),
+                      const SizedBox(height: 32),
+
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8.0, bottom: 12.0),
+                        child: Text(
+                          "App Settings",
+                          style: textTheme.titleSmall?.copyWith(
+                            color: colorTheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+              ),
 
-                const SizedBox(height: 28),
-
-                // App settings
-                _SettingsSection(
-                  title: 'APP SETTINGS',
-                  onItemTap: (item) {
-                    if (item.title == 'Preferences') {
-                      context.push(Routes.preferences);
-                    } else if (item.title == 'Notifications') {
-                      context.push(Routes.notifications);
-                    } else {
-                      _showComingSoon(context, item.title);
-                    }
-                  },
-                  items: const [
-                    _SettingsItem(
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                sliver: SliverList.list(
+                  children: [
+                    _SettingsTile(
                       icon: Icons.tune_rounded,
-                      title: 'Preferences',
-                      subtitle: 'Theme and diary appearance',
+                      iconColor: theme.colorScheme.onSecondaryFixedVariant,
+                      iconBgColor: theme.colorScheme.secondaryFixedDim,
+                      title: "Preferences",
+                      subtitle: "Theme and diary appearance",
+                      position: TilePosition.first,
+                      onTap: () {
+                        context.push("preferences");
+                      },
                     ),
-                    _SettingsItem(
+                    const SizedBox(height: 3),
+                    _SettingsTile(
                       icon: Icons.notifications_outlined,
-                      title: 'Notifications',
-                      subtitle: 'Daily reminders',
+                      iconColor: theme.colorScheme.onTertiaryFixed,
+                      iconBgColor: theme.colorScheme.tertiaryFixed,
+                      title: "Notifications",
+                      subtitle: "Daily reminders",
+                      position: TilePosition.middle,
+                      onTap: () {
+                        context.push("notifications");
+
+                      },
                     ),
-                    _SettingsItem(
+                    const SizedBox(height: 3),
+                    _SettingsTile(
                       icon: Icons.shield_outlined,
-                      title: 'Privacy & Security',
-                      subtitle: 'App lock and biometrics',
+                      iconColor: theme.colorScheme.onTertiaryFixed,
+                      iconBgColor: theme.colorScheme.tertiaryFixed,
+                      title: "Privacy & Security",
+                      subtitle: "App lock and Biometrics",
+                      position: TilePosition.last,
+                      onTap: () {
+                        // TODO: Route to Privacy & Security
+                      },
                     ),
                   ],
                 ),
+              ),
 
-                const SizedBox(height: 24),
-
-                // Diary and information
-                _SettingsSection(
-                  title: 'DIARY & INFORMATION',
-                  items: const [
-                    _SettingsItem(
-                      icon: Icons.auto_awesome_outlined,
-                      title: 'Diary Generation',
-                      subtitle: 'Choose how your diary is created',
-                    ),
-                    _SettingsItem(
-                      icon: Icons.backup_outlined,
-                      title: 'Backup & Recovery',
-                      subtitle: 'Manage your diary backups',
-                    ),
-                    _SettingsItem(
-                      icon: Icons.info_outline_rounded,
-                      title: 'App Info',
-                      subtitle: 'About ChronoLoge',
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 28),
-
-                // Footer
-                Center(
+              // Second Header
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24.0, 24.0, 16.0, 12.0),
                   child: Text(
-                    'ChronoLoge · Your days, remembered.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant,
+                    "Diary & Info",
+                    style: textTheme.titleSmall?.copyWith(
+                      color: colorTheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
                     ),
-                    textAlign: TextAlign.center,
                   ),
                 ),
-              ]),
-            ),
+              ),
+
+              // Diary & Info List (Optimized Lazy Loading)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                sliver: SliverList.list(
+                  children: [
+                    _SettingsTile(
+                      icon: Icons.auto_awesome,
+                      iconColor: theme.colorScheme.onInverseSurface,
+                      iconBgColor: theme.colorScheme.inverseSurface,
+                      title: "Diary Generation",
+                      subtitle: "Choose how your diary is created",
+                      position: TilePosition.first,
+                      onTap: () {
+                        // TODO: Route to Diary Generation
+                      },
+                    ),
+                    const SizedBox(height: 3),
+                    _SettingsTile(
+                      icon: Icons.backup_outlined,
+                      iconColor: theme.colorScheme.onSecondaryFixedVariant,
+                      iconBgColor: theme.colorScheme.secondaryFixedDim,
+                      title: "Backup & Recovery",
+                      subtitle: "Manage your diary backups",
+                      position: TilePosition.middle,
+                      onTap: () {
+                        // TODO: Route to Backup & Recovery
+                      },
+                    ),
+                    const SizedBox(height: 3),
+                    _SettingsTile(
+                      icon: Icons.info_outline_rounded,
+                      iconColor: theme.colorScheme.onSecondaryFixedVariant,
+                      iconBgColor: theme.colorScheme.secondaryFixedDim,
+                      title: "App Info",
+                      subtitle: "About ChronoLoge",
+                      position: TilePosition.last,
+                      onTap: () {
+                        // TODO: Route to App Info
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              // Footer
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40.0),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Text(
+                          "ChronoLoge . Your days, remembered.",
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorTheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Version 1.1.0-beta . JJSHH . Made with ❤️ at devlabs_",
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorTheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            ],
           ),
         ],
       ),
     );
   }
-
-  // Coming soon message
-  void _showComingSoon(BuildContext context, String title) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$title will be connected in the next step.')),
-    );
-  }
 }
 
-// Settings section
-class _SettingsSection extends StatelessWidget {
-  const _SettingsSection({
-    required this.title,
-    required this.items,
-    this.onItemTap,
-  });
+class _ProfileCard extends StatelessWidget {
+  final String name;
+  final String email;
+  final String initial;
+  final String? photoUrl;
+  final VoidCallback onTap;
 
-  final String title;
-  final List<_SettingsItem> items;
-  final ValueChanged<_SettingsItem>? onItemTap;
+  const _ProfileCard({
+    required this.name,
+    required this.email,
+    required this.initial,
+    required this.onTap,
+    this.photoUrl,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final colorTheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 10),
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: colors.primary,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.1,
-            ),
-          ),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            color: colors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: colors.outlineVariant),
-          ),
-          child: Column(
+    return Material(
+      color: colorTheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
             children: [
-              for (var i = 0; i < items.length; i++) ...[
-                Material(
-                  color: Colors.transparent,
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
+              CircleAvatar(
+                radius: 30,
+                backgroundColor: Colors.deepPurple.shade600,
+                backgroundImage: hasPhoto ? NetworkImage(photoUrl!) : null,
+                child: !hasPhoto
+                    ? Text(
+                        initial,
+                        style: textTheme.headlineSmall?.copyWith(
+                          color: Colors.white,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: textTheme.titleMedium?.copyWith(
+                        color: colorTheme.onSurface,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    leading: Icon(items[i].icon, color: colors.primary),
-                    title: Text(
-                      items[i].title,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    const SizedBox(height: 2),
+                    Text(
+                      email,
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: colorTheme.onSurfaceVariant,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    subtitle: Text(items[i].subtitle),
-                    trailing: Icon(
-                      Icons.chevron_right,
-                      color: colors.onSurfaceVariant,
-                    ),
-                    onTap: () {
-                      if (onItemTap != null) {
-                        onItemTap!(items[i]);
-                      } else {
-                        _showComingSoon(context, items[i].title);
-                      }
-                    },
-                  ),
+                  ],
                 ),
-                if (i < items.length - 1)
-                  Divider(height: 1, indent: 56, color: colors.outlineVariant),
-              ],
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: colorTheme.onSurfaceVariant.withValues(alpha: 0.5),
+              ),
             ],
           ),
         ),
-      ],
-    );
-  }
-
-  void _showComingSoon(BuildContext context, String title) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$title will be connected in the next step.')),
+      ),
     );
   }
 }
 
-// Settings item model
-class _SettingsItem {
-  const _SettingsItem({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
+class _SettingsTile extends StatelessWidget {
   final IconData icon;
+  final Color iconColor;
+  final Color iconBgColor;
   final String title;
   final String subtitle;
+  final TilePosition position;
+  final VoidCallback onTap;
+
+  const _SettingsTile({
+    required this.icon,
+    required this.iconColor,
+    required this.iconBgColor,
+    required this.title,
+    required this.subtitle,
+    required this.position,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorTheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    BorderRadius borderRadius;
+    switch (position) {
+      case TilePosition.first:
+        borderRadius = const BorderRadius.vertical(
+          top: Radius.circular(18),
+          bottom: Radius.circular(8),
+        );
+        break;
+      case TilePosition.last:
+        borderRadius = const BorderRadius.vertical(
+          top: Radius.circular(8),
+          bottom: Radius.circular(18),
+        );
+        break;
+      case TilePosition.middle:
+        borderRadius = BorderRadius.circular(8);
+        break;
+      case TilePosition.standalone:
+        borderRadius = BorderRadius.circular(18);
+        break;
+    }
+
+    return Material(
+      color: colorTheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(borderRadius: borderRadius),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: iconBgColor,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: iconColor, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: colorTheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: textTheme.labelLarge?.copyWith(
+                        color: colorTheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: colorTheme.onSurfaceVariant.withValues(alpha: 0.5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

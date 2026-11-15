@@ -27,7 +27,7 @@ extension DiaryFontStyleDetails on DiaryFontStyle {
 
   TextStyle titleStyle(TextStyle? baseStyle) {
     return switch (this) {
-      DiaryFontStyle.fraunces => GoogleFonts.fraunces(textStyle: baseStyle),
+      DiaryFontStyle.fraunces => TextStyle(fontFamily: "Fraunces").merge(baseStyle),
       DiaryFontStyle.literata => GoogleFonts.literata(
         textStyle: baseStyle,
         fontStyle: FontStyle.italic,

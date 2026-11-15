@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../shared/providers/theme_mode_provider.dart';
 import '../../shared/diary_font_style.dart';
@@ -12,188 +13,215 @@ class PreferencesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final appBarBackgroundColor = Color.alphaBlend(
+      colors.surfaceTint.withValues(alpha: 0.1),
+      colors.surfaceContainer,
+    );
     final selectedTheme = ref.watch(themeModeProvider);
     final diaryFontState = ref.watch(preferencesViewModelProvider);
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar.large(title: const Text('Preferences'), pinned: true),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                Text(
-                  'Make ChronoLoge feel like yours.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
+      backgroundColor: appBarBackgroundColor,
+      appBar: AppBar(
+        title: const Text('Preferences'),
+        backgroundColor: appBarBackgroundColor,
+        surfaceTintColor: Colors.transparent,
+      ),
+      body: Material(
+        clipBehavior: Clip.antiAlias,
+        color: colors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: ListView(
+            children: [
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  gradient: LinearGradient(
+                    begin: AlignmentGeometry.topLeft,
+                    end: AlignmentGeometry.bottomEnd,
+                    colors: [
+                    colors.surfaceContainerHighest,
+                    colors.surfaceContainer,
+                  ])
                 ),
-                const SizedBox(height: 28),
-
-                _SectionHeading(
-                  title: 'APPEARANCE',
-                  subtitle: 'Choose how the app looks.',
+                child: Text(
+                'Make \nChronoLoge feel like "yours".',
+                style: GoogleFonts.literata(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  fontStyle: FontStyle.italic,
+                  color: colors.onSurface,
                 ),
-                const SizedBox(height: 12),
+              ),
+              ),
+              
+              const SizedBox(height: 28),
 
-                _PreferenceCard(
-                  child: RadioGroup<ThemeMode>(
-                    groupValue: selectedTheme,
-                    onChanged: (mode) async {
-                      if (mode == null) return;
+              const _SectionHeading(
+                title: 'APPEARANCE',
+                subtitle: 'Choose how the app looks.',
+              ),
+              const SizedBox(height: 12),
 
-                      try {
-                        await ref
-                            .read(themeModeProvider.notifier)
-                            .setThemeMode(mode);
-                      } catch (_) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Could not save the appearance setting.',
-                              ),
+              _PreferenceCard(
+                child: RadioGroup<ThemeMode>(
+                  groupValue: selectedTheme,
+                  onChanged: (mode) async {
+                    if (mode == null) return;
+
+                    try {
+                      await ref
+                          .read(themeModeProvider.notifier)
+                          .setThemeMode(mode);
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Could not save the appearance setting.',
                             ),
-                          );
-                        }
+                          ),
+                        );
                       }
-                    },
-                    child: const Column(
-                      children: [
-                        _ThemeOption(
-                          title: 'System default',
-                          subtitle: 'Follow your device settings',
-                          value: ThemeMode.system,
-                        ),
-                        Divider(height: 1),
-                        _ThemeOption(
-                          title: 'Light',
-                          subtitle: 'Always use light appearance',
-                          value: ThemeMode.light,
-                        ),
-                        Divider(height: 1),
-                        _ThemeOption(
-                          title: 'Dark',
-                          subtitle: 'Always use dark appearance',
-                          value: ThemeMode.dark,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-
-                _SectionHeading(
-                  title: 'DIARY FONTS',
-                  subtitle: 'Choose the typography for your diary entries.',
-                ),
-                const SizedBox(height: 12),
-
-                diaryFontState.when(
-                  loading: () => const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
-                  error: (_, _) =>
-                      const Text('Unable to load your diary font preference.'),
-                  data: (selectedFont) => Column(
+                    }
+                  },
+                  child: const Column(
                     children: [
-                      _DiaryFontOption(
-                        title: DiaryFontStyle.fraunces.label,
-                        description: DiaryFontStyle.fraunces.description,
-                        selected: selectedFont == DiaryFontStyle.fraunces,
-                        onTap: () => _saveDiaryFont(
-                          context,
-                          ref,
-                          DiaryFontStyle.fraunces,
-                        ),
-                        titleStyle: DiaryFontStyle.fraunces.titleStyle(
-                          const TextStyle(
-                            fontSize: 29,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                          ),
-                        ),
-                        bodyStyle: DiaryFontStyle.fraunces.bodyStyle(
-                          const TextStyle(
-                            fontSize: 15,
-                            height: 1.6,
-                            color: Colors.black,
-                          ),
-                        ),
+                      _ThemeOption(
+                        title: 'System default',
+                        subtitle: 'Follow your device settings',
+                        value: ThemeMode.system,
                       ),
-                      const SizedBox(height: 12),
-
-                      _DiaryFontOption(
-                        title: DiaryFontStyle.literata.label,
-                        description: DiaryFontStyle.literata.description,
-                        selected: selectedFont == DiaryFontStyle.literata,
-                        onTap: () => _saveDiaryFont(
-                          context,
-                          ref,
-                          DiaryFontStyle.literata,
-                        ),
-                        titleStyle: DiaryFontStyle.literata.titleStyle(
-                          const TextStyle(
-                            fontSize: 29,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                          ),
-                        ),
-                        bodyStyle: DiaryFontStyle.literata.bodyStyle(
-                          const TextStyle(
-                            fontSize: 17,
-                            height: 1.6,
-                            color: Colors.black,
-                          ),
-                        ),
+                      Divider(height: 1),
+                      _ThemeOption(
+                        title: 'Light',
+                        subtitle: 'Always use light appearance',
+                        value: ThemeMode.light,
                       ),
-                      const SizedBox(height: 12),
-
-                      _DiaryFontOption(
-                        title: DiaryFontStyle.instrument.label,
-                        description: DiaryFontStyle.instrument.description,
-                        selected: selectedFont == DiaryFontStyle.instrument,
-                        onTap: () => _saveDiaryFont(
-                          context,
-                          ref,
-                          DiaryFontStyle.instrument,
-                        ),
-                        titleStyle: DiaryFontStyle.instrument.titleStyle(
-                          const TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                          ),
-                        ),
-                        bodyStyle: DiaryFontStyle.instrument.bodyStyle(
-                          const TextStyle(
-                            fontSize: 15,
-                            height: 1.6,
-                            color: Colors.black,
-                          ),
-                        ),
+                      Divider(height: 1),
+                      _ThemeOption(
+                        title: 'Dark',
+                        subtitle: 'Always use dark appearance',
+                        value: ThemeMode.dark,
                       ),
                     ],
                   ),
                 ),
+              ),
 
-                const SizedBox(height: 20),
-                Text(
-                  'Your selection will be used for diary content. '
-                  'It does not change the rest of the app.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
+              const SizedBox(height: 32),
+
+              const _SectionHeading(
+                title: 'DIARY FONTS',
+                subtitle: 'Choose the typography for your diary entries.',
+              ),
+              const SizedBox(height: 12),
+
+              diaryFontState.when(
+                loading: () => const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: CircularProgressIndicator(),
                   ),
                 ),
-              ]),
-            ),
+                error: (_, _) =>
+                    const Text('Unable to load your diary font preference.'),
+                data: (selectedFont) => Column(
+                  children: [
+                    _PreferenceCard(
+                      child: Column(
+                        children: [
+                          _DiaryFontOption(
+                            title: DiaryFontStyle.fraunces.label,
+                            description: DiaryFontStyle.fraunces.description,
+                            value: DiaryFontStyle.fraunces,
+                            groupValue: selectedFont,
+                            onChanged: (font) {
+                              if (font != null){
+                                _saveDiaryFont(context, ref, font);
+                              }
+                            },
+                          ),
+                          _DiaryFontOption(
+                            title: DiaryFontStyle.literata.label,
+                            description: DiaryFontStyle.literata.description,
+                            value: DiaryFontStyle.literata,
+                            groupValue: selectedFont,
+                            onChanged: (font) {
+                              if (font != null){
+                                _saveDiaryFont(context, ref, font);}
+                            },
+                          ),
+                          _DiaryFontOption(
+                            title: DiaryFontStyle.instrument.label,
+                            description: DiaryFontStyle.instrument.description,
+                            value: DiaryFontStyle.instrument,
+                            groupValue: selectedFont,
+                            onChanged: (font) {
+                              if (font != null){
+                                _saveDiaryFont(context, ref, font);}
+                            },
+                          ),
+
+                          Container(
+                            margin: EdgeInsets.all(16),
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: colors.surfaceContainerLowest,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'A little moment from today',
+                                  style: selectedFont.titleStyle(
+                                    TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w600,
+                                      color: colors.onSurface,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Today was filled with little moments worth remembering. I want to keep these memories close.',
+                                  style: selectedFont.bodyStyle(
+                                    TextStyle(
+                                      fontSize: 15,
+                                      height: 1.6,
+                                      color: colors.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+              Text(
+                '* Your selection will be used for diary content. '
+                'It does not change the rest of the app.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 32),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -233,7 +261,7 @@ class _SectionHeading extends StatelessWidget {
         Text(
           title,
           style: theme.textTheme.labelLarge?.copyWith(
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.bold,
             letterSpacing: 1.1,
             color: theme.colorScheme.primary,
           ),
@@ -258,12 +286,12 @@ class _PreferenceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
+    return Material(
+      color: colors.surfaceContainerLow,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colors.outlineVariant),
+        side: BorderSide(color: colors.outlineVariant),
       ),
       child: child,
     );
@@ -285,7 +313,7 @@ class _ThemeOption extends StatelessWidget {
   Widget build(BuildContext context) {
     return RadioListTile<ThemeMode>(
       contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-      title: Text(title),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
       subtitle: Text(subtitle),
       value: value,
     );
@@ -296,91 +324,26 @@ class _DiaryFontOption extends StatelessWidget {
   const _DiaryFontOption({
     required this.title,
     required this.description,
-    required this.selected,
-    required this.onTap,
-    required this.titleStyle,
-    required this.bodyStyle,
+    required this.value,
+    required this.groupValue,
+    required this.onChanged,
   });
 
   final String title;
   final String description;
-  final bool selected;
-  final VoidCallback onTap;
-  final TextStyle titleStyle;
-  final TextStyle? bodyStyle;
+  final DiaryFontStyle value;
+  final DiaryFontStyle groupValue;
+  final ValueChanged<DiaryFontStyle?> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Material(
-      color: selected
-          ? colors.primaryContainer.withValues(alpha: 0.35)
-          : colors.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: selected ? colors.primary : colors.outlineVariant,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  Icon(
-                    selected
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_off,
-                    color: selected ? colors.primary : colors.onSurfaceVariant,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                description,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: colors.onSurfaceVariant),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('A little moment from today', style: titleStyle),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Today was filled with little moments worth remembering. '
-                      'I want to keep these memories close.',
-                      style: bodyStyle,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return RadioListTile<DiaryFontStyle>(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+      subtitle: Text(description),
+      value: value,
+      groupValue: groupValue,
+      onChanged: onChanged,
     );
   }
 }
