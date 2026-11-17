@@ -133,7 +133,7 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 3),
                     _SettingsTile(
-                      icon: Icons.shield_outlined,
+                      icon: Icons.lock_outline_rounded,
                       iconColor: theme.colorScheme.onTertiaryFixed,
                       iconBgColor: theme.colorScheme.tertiaryFixed,
                       title: "Privacy & Security",
@@ -375,13 +375,13 @@ class _SettingsTile extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 48,
-                height: 48,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
                   color: iconBgColor,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: iconColor, size: 24),
+                child: Icon(icon, color: iconColor, size: 22),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -404,10 +404,6 @@ class _SettingsTile extends StatelessWidget {
                     ),
                   ],
                 ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: colorTheme.onSurfaceVariant.withValues(alpha: 0.5),
               ),
             ],
           ),

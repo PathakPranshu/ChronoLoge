@@ -1,4 +1,3 @@
-
 import 'package:awesome_notifications/awesome_notifications.dart';
 
 import 'notification_function.dart';
@@ -16,18 +15,36 @@ class NotificationService {
   }
 
   Future<void> _requestPermissions() async {
-    bool isAllowed =
-        await NotificationFunction.plugin.isNotificationAllowed();
+    bool isAllowed = await NotificationFunction.plugin.isNotificationAllowed();
 
     if (!isAllowed) {
       await NotificationFunction.plugin.requestPermissionToSendNotifications();
     }
+
+    final permissions = await NotificationFunction.plugin.checkPermissionList(
+      channelKey: NotificationFunction.channelKey,
+      permissions: [
+        NotificationPermission.Alert,
+        NotificationPermission.Sound,
+        NotificationPermission.Badge,
+        NotificationPermission.PreciseAlarms,
+      ],
+    );
+
+    if (!permissions.contains(NotificationPermission.PreciseAlarms)) {
+      await NotificationFunction.plugin.requestPermissionToSendNotifications(
+        channelKey: NotificationFunction.channelKey,
+        permissions: [
+          NotificationPermission.Alert,
+          NotificationPermission.Sound,
+          NotificationPermission.Badge,
+          NotificationPermission.PreciseAlarms,
+        ],
+      );
+    }
   }
 
-  Future<void> scheduleDailyPrompt({
-    int? hour,
-    int? minute,
-  }) async {
+  Future<void> scheduleDailyPrompt({int? hour, int? minute}) async {
     await NotificationFunction.plugin.cancel(_dailyNotificationId);
 
     final now = DateTime.now();
@@ -46,8 +63,8 @@ class NotificationService {
       scheduledDate = scheduledDate.add(const Duration(days: 1));
     }
 
-    final timeZone =
-        await NotificationFunction.plugin.getLocalTimeZoneIdentifier();
+    final timeZone = await NotificationFunction.plugin
+        .getLocalTimeZoneIdentifier();
 
     await NotificationFunction.plugin.createNotification(
       content: NotificationContent(
@@ -62,6 +79,7 @@ class NotificationService {
         second: 0,
         timeZone: timeZone,
         repeats: true,
+        // allowWhileIdle: true
       ),
     );
   }

@@ -115,7 +115,6 @@ class CustomTheme {
 
   // Fixed application typography.
   static TextTheme buildTextTheme() {
-
     return TextTheme(
       displayMedium: const TextStyle(
         fontFamily: 'Fraunces',
@@ -135,12 +134,12 @@ class CustomTheme {
           FontVariation('WONK', 0),
         ],
       ),
-      headlineLarge: GoogleFonts.geist(),
+      headlineLarge: GoogleFonts.geist(fontWeight: FontWeight.w500),
       headlineMedium: GoogleFonts.geist(),
       headlineSmall: GoogleFonts.geist(),
       titleLarge: GoogleFonts.geist(),
       titleMedium: GoogleFonts.geist(),
-      titleSmall: GoogleFonts.geist().copyWith(fontWeight: FontWeight.w500),
+      titleSmall: GoogleFonts.geist(fontWeight: FontWeight.w500),
       labelLarge: GoogleFonts.geist(),
       labelMedium: GoogleFonts.geist(),
       labelSmall: GoogleFonts.geist(),

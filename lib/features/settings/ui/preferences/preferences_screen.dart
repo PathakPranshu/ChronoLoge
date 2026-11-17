@@ -14,7 +14,7 @@ class PreferencesScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final appBarBackgroundColor = Color.alphaBlend(
-      colors.surfaceTint.withValues(alpha: 0.1),
+      colors.surfaceTint.withValues(alpha: 0.075),
       colors.surfaceContainer,
     );
     final selectedTheme = ref.watch(themeModeProvider);
@@ -30,7 +30,7 @@ class PreferencesScreen extends ConsumerWidget {
       body: Material(
         clipBehavior: Clip.antiAlias,
         color: colors.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: ListView(
@@ -41,13 +41,14 @@ class PreferencesScreen extends ConsumerWidget {
                 padding: EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
-                  gradient: LinearGradient(
-                    begin: AlignmentGeometry.topLeft,
-                    end: AlignmentGeometry.bottomEnd,
+                  gradient: RadialGradient(
+                    center: AlignmentGeometry.directional(1, 3.5),
+                    radius: 2,
                     colors: [
-                    colors.surfaceContainerHighest,
-                    colors.surfaceContainer,
-                  ])
+                      colors.primaryContainer.withRed(255),
+                      colors.surfaceContainer,
+                    ]
+                  )
                 ),
                 child: Text(
                 'Make \nChronoLoge feel like "yours".',

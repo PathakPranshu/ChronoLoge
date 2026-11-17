@@ -28,7 +28,7 @@ class MainApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
 
     // Load the saved daily reminder preference.
-    ref.watch(dailyRemindersEnabledProvider);
+    ref.watch(notificationSettingsProvider);
 
     return MaterialApp.router(
       theme: CustomTheme.lightThemeData(context),
