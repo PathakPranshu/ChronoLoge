@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../shared/providers/theme_mode_provider.dart';
 import '../../shared/diary_font_style.dart';
 import '../../shared/providers/diary_font_provider.dart';
+import '../widgets/section_heading.dart';
 
 class PreferencesScreen extends ConsumerWidget {
   const PreferencesScreen({super.key});
@@ -63,7 +64,7 @@ class PreferencesScreen extends ConsumerWidget {
               
               const SizedBox(height: 28),
 
-              const _SectionHeading(
+              const SectionHeading(
                 title: 'APPEARANCE',
                 subtitle: 'Choose how the app looks.',
               ),
@@ -117,7 +118,7 @@ class PreferencesScreen extends ConsumerWidget {
 
               const SizedBox(height: 32),
 
-              const _SectionHeading(
+              const SectionHeading(
                 title: 'DIARY FONTS',
                 subtitle: 'Choose the typography for your diary entries.',
               ),
@@ -243,39 +244,6 @@ class PreferencesScreen extends ConsumerWidget {
         );
       }
     }
-  }
-}
-
-class _SectionHeading extends StatelessWidget {
-  const _SectionHeading({required this.title, required this.subtitle});
-
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: theme.textTheme.labelLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.1,
-            color: theme.colorScheme.primary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
   }
 }
 

@@ -1,4 +1,5 @@
 import 'package:chronologe/core/utils/gradient_rotation_matrix.dart';
+import 'package:chronologe/core/utils/large_button.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -196,7 +197,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       key: _formKey,
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.start,
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Text(
                             "Enter your email",
@@ -243,25 +244,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ],
                           ),
                           const SizedBox(height: 8),
-                          SizedBox(
-                            height: 54,
-                            width: double.infinity,
-                            child: FilledButton(
+                          LargeButton(
                               onPressed: canSubmit ? _submitLogin : null,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: colorTheme.primary,
-                                foregroundColor: colorTheme.onPrimary,
-                                elevation: 0,
-                                shadowColor: Colors.transparent,
-                                surfaceTintColor: Colors.transparent,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                textStyle: textTheme.bodyLarge,
-                              ),
                               child: isProcessing
                                   ? const SizedBox(
                                       height: 24,
@@ -272,7 +256,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     )
                                   : Text("Login"),
                             ),
-                          ),
                         ],
                       ),
                     ),

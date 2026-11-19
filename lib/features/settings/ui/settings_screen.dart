@@ -17,7 +17,7 @@ class SettingsScreen extends ConsumerWidget {
     final textTheme = theme.textTheme;
     final screenSize = MediaQuery.sizeOf(context);
 
-    final authState = ref.watch(authStateProvider);
+    final authState = ref.watch(userChangesProvider);
     final user = authState.value;
     final userName = user?.displayName ?? 'User';
     final userEmail = user?.email ?? 'user@chronologe.app';
@@ -272,8 +272,8 @@ class _ProfileCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 30,
-                backgroundColor: Colors.deepPurple.shade600,
                 backgroundImage: hasPhoto ? NetworkImage(photoUrl!) : null,
+                backgroundColor: hasPhoto ? Colors.transparent :Colors.deepPurple.shade600,
                 child: !hasPhoto
                     ? Text(
                         initial,

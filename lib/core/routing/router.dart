@@ -20,8 +20,14 @@ import 'router_provider.dart';
 import 'routes.dart';
 
 final goRouterProvider = Provider<GoRouter>((ref) {
+  final refreshNotifier = ValueNotifier<int>(0);
+
+  ref.listen(authStateProvider, (_, _) => refreshNotifier.value++);
+  ref.listen(sessionUnlockedProvider, (_, _) => refreshNotifier.value++);
+  ref.onDispose(refreshNotifier.dispose);
   return GoRouter(
     initialLocation: Routes.home,
+    refreshListenable: refreshNotifier,
     redirect: (context, state) => _redirect(context, state, ref),
     routes: [
       GoRoute(
@@ -91,8 +97,8 @@ Future<String?> _redirect(
   GoRouterState state,
   Ref ref,
 ) async {
-  final authState = ref.watch(authStateProvider);
-  final isUnlocked = ref.watch(sessionUnlockedProvider);
+  final authState = ref.read(authStateProvider);
+  final isUnlocked = ref.read(sessionUnlockedProvider);
 
   if (authState.isLoading) return null;
 

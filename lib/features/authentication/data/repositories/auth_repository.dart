@@ -19,7 +19,7 @@ class AuthRepository {
     GoogleSignIn? googleSignIn,
     LocalAuthentication? localAuth,
     SecureStorageService? secureStorage,
-    UserDatabase? userDatabase
+    UserDatabase? userDatabase,
   }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
        _googleSignIn = googleSignIn ?? GoogleSignIn.instance,
        _localAuth = localAuth ?? LocalAuthentication(),
@@ -29,10 +29,13 @@ class AuthRepository {
   /// Stream to listen to auth state changes (logged in or logged out)
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
+  /// Stream to listen to user changes (name, email, password updates)
+  Stream<User?> get userChanges => _firebaseAuth.userChanges();
+
   // Synchronizes Firebase User data to local encrypted SQLite
   Future<void> _syncToSqlite(User? user) async {
     if (user == null || _userDatabase == null) return;
-    
+
     await _userDatabase.upsertUser(
       userId: user.uid,
       name: user.displayName ?? 'User',
@@ -147,6 +150,123 @@ class AuthRepository {
 
     // Clears the PIN and Biometric preferences
     await _secureStorage.clearSecurityData();
+  }
+
+  /// Re-authentication for email/password users
+  Future<void> reauthenticateWithPassword(String password) async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null || user.email == null) {
+      throw "No user currently signed in.";
+    }
+
+    try {
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: password,
+      );
+      await user.reauthenticateWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == "wrong-password" || e.code == "invalid-credential") {
+        throw "Current password is incorrect.";
+      }
+      throw 'Re-authentication failed. Please try again.';
+    }
+  }
+
+  /// Checks if the current user signed in using google
+  bool isGoogleAuthUser() {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) return false;
+
+    // Check if any of linked provider is google
+    return user.providerData.any(
+      (userInfo) => userInfo.providerId == "google.com",
+    );
+  }
+
+  /// Update user display name
+  Future<void> updateDisplayName(String newName) async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) throw "No user currently signed in";
+    try {
+      await user.updateDisplayName(newName);
+
+      // Reload the user to get updated data
+      await user.reload();
+
+      await _syncToSqlite(_firebaseAuth.currentUser);
+    } catch (e) {
+      throw "Failed to update name. Try Again!";
+    }
+  }
+
+  /// Update the user signin email
+  Future<void> updateEmail({
+    required String newEmail,
+    required String currentPassword,
+  }) async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) throw "No user currently signed in";
+
+    if (isGoogleAuthUser()) {
+      throw 'Cannot change email for Google Sign-In accounts.';
+    }
+
+    try {
+      await reauthenticateWithPassword(currentPassword);
+      // Sends a verification link to the new email address.
+      await user.verifyBeforeUpdateEmail(newEmail);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        throw 'This email is already associated with another account.';
+      } else if (e.code == 'invalid-email') {
+        throw 'Please enter a valid email address.';
+      }
+      throw 'Failed to update email. Try again!';
+    }
+  }
+
+  /// Update signin password
+  Future<void> updatePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) throw 'No user currently signed in.';
+
+    if (isGoogleAuthUser()) {
+      throw 'Cannot change password for Google Sign-In accounts.';
+    }
+    try {
+      await reauthenticateWithPassword(currentPassword);
+      await user.updatePassword(newPassword);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'weak-password') {
+        throw 'The new password is too weak.';
+      }
+      throw 'Failed to update password. Try again!';
+    }
+  }
+
+  /// Deletes the Firebase account and clears local security credentials
+  Future<void> deleteAccount({String? currentPassword}) async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) throw 'No user currently signed in.';
+
+    try {
+      if (!isGoogleAuthUser() && currentPassword != null) {
+        await reauthenticateWithPassword(currentPassword);
+      }
+      await user.delete();
+
+      // Sign out the user and clear local security credential
+      await signOut();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        throw 'Please sign out and sign back in before deleting your account.';
+      }
+      throw 'Failed to delete account. Try again!';
+    }
   }
 
   /* ---- BIOMETRICS SETUP ---- */
