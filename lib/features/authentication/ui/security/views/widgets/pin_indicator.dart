@@ -45,7 +45,7 @@ class _PinIndicatorState extends State<PinIndicator>
 
   void _shakeAndVibrate() {
     Feedback.forLongPress(context);
-    Future.delayed(const Duration(milliseconds: 200));
+    Future.delayed(const Duration(milliseconds: 500));
     Feedback.forLongPress(context);
     _controller.forward(from: 0);
   }

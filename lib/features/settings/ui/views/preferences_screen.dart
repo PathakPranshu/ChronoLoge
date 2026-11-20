@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../shared/providers/theme_mode_provider.dart';
 import '../../shared/diary_font_style.dart';
 import '../../shared/providers/diary_font_provider.dart';
-import '../widgets/section_heading.dart';
+import 'widgets/section_heading.dart';
 
 class PreferencesScreen extends ConsumerWidget {
   const PreferencesScreen({super.key});

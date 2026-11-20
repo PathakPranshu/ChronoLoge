@@ -76,7 +76,10 @@ class AccountViewModel extends AsyncNotifier<AccountState> {
       await ref
           .read(authRepositoryProvider)
           .updateEmail(newEmail: newEmail, currentPassword: currentPassword);
+      
+      // TODO
       // Do not overwrite email yet; Firebase updates it after verification link is clicked
+
       state = AsyncData(current);
       return true;
     } catch (e, st) {

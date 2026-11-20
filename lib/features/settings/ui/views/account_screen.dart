@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../widgets/section_heading.dart';
-import 'account_viewmodel.dart';
+import 'widgets/section_heading.dart';
+import '../viewmodels/account_viewmodel.dart';
 import 'widgets/account_card.dart';
 import 'widgets/account_text_field.dart';
 

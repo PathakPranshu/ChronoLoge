@@ -169,7 +169,9 @@ class _DailyReminderCard extends StatelessWidget {
             children: [
               Text(
                 'Daily reminders',
-                style: textTheme.titleSmall,
+                style: textTheme.titleMedium!.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 2),
               Text(

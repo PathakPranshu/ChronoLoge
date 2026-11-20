@@ -1,9 +1,10 @@
+import 'package:chronologe/core/routing/routes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/utils/gradient_rotation_matrix.dart';
-import '../../authentication/shared/providers/auth_provider.dart';
+import '../../../../core/utils/gradient_rotation_matrix.dart';
+import '../../../authentication/shared/providers/auth_provider.dart';
 
 enum TilePosition { first, middle, last, standalone }
 
@@ -83,7 +84,7 @@ class SettingsScreen extends ConsumerWidget {
                         initial: userInitial,
                         photoUrl: userPhotoUrl,
                         onTap: () {
-                          context.push("account");
+                          context.push("settings/account");
                         },
                       ),
                       const SizedBox(height: 32),
@@ -115,7 +116,7 @@ class SettingsScreen extends ConsumerWidget {
                       subtitle: "Theme and diary appearance",
                       position: TilePosition.first,
                       onTap: () {
-                        context.push("preferences");
+                        context.push(Routes.preferences);
                       },
                     ),
                     const SizedBox(height: 3),
@@ -127,8 +128,7 @@ class SettingsScreen extends ConsumerWidget {
                       subtitle: "Daily reminders",
                       position: TilePosition.middle,
                       onTap: () {
-                        context.push("notifications");
-
+                        context.push(Routes.notifications);
                       },
                     ),
                     const SizedBox(height: 3),
@@ -140,7 +140,7 @@ class SettingsScreen extends ConsumerWidget {
                       subtitle: "App lock and Biometrics",
                       position: TilePosition.last,
                       onTap: () {
-                        // TODO: Route to Privacy & Security
+                        context.push(Routes.privacySecuritySettings);
                       },
                     ),
                   ],
@@ -174,7 +174,7 @@ class SettingsScreen extends ConsumerWidget {
                       subtitle: "Choose how your diary is created",
                       position: TilePosition.first,
                       onTap: () {
-                        // TODO: Route to Diary Generation
+                        context.push(Routes.diaryGenerationSettings);
                       },
                     ),
                     const SizedBox(height: 3),
@@ -273,7 +273,9 @@ class _ProfileCard extends StatelessWidget {
               CircleAvatar(
                 radius: 30,
                 backgroundImage: hasPhoto ? NetworkImage(photoUrl!) : null,
-                backgroundColor: hasPhoto ? Colors.transparent :Colors.deepPurple.shade600,
+                backgroundColor: hasPhoto
+                    ? Colors.transparent
+                    : Colors.deepPurple.shade600,
                 child: !hasPhoto
                     ? Text(
                         initial,

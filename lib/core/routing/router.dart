@@ -1,12 +1,15 @@
+import 'package:chronologe/features/settings/ui/views/change_pin_screen.dart';
+import 'package:chronologe/features/settings/ui/views/diary_generation_settings_screen.dart';
+import 'package:chronologe/features/settings/ui/views/privacy_security_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../demo.dart';
-import '../../features/settings/ui/settings_screen.dart';
-import '../../features/settings/ui/account/account_screen.dart';
-import '../../features/settings/ui/preferences/preferences_screen.dart';
-import '../../features/settings/ui/notification/notification_settings_screen.dart';
+import '../../features/settings/ui/views/settings_screen.dart';
+import '../../features/settings/ui/views/account_screen.dart';
+import '../../features/settings/ui/views/preferences_screen.dart';
+import '../../features/settings/ui/views/notification_settings_screen.dart';
 import '../../features/authentication/shared/providers/auth_provider.dart';
 import '../../features/authentication/shared/providers/secure_storage_provider.dart';
 import '../../features/diary_drafts/ui/drafts_screen.dart';
@@ -57,6 +60,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.notifications,
         builder: (context, state) => const NotificationSettingsScreen(),
+      ),
+      GoRoute(
+        path: Routes.privacySecuritySettings,
+        builder: (context, state) => const PrivacySecurityScreen(),
+      ),
+      GoRoute(
+        path: Routes.changePin,
+        builder: (context, state) => const ChangePinScreen(),
+      ),
+      GoRoute(
+        path: Routes.diaryGenerationSettings,
+        builder: (context, state) => const DiaryGenerationScreen(),
       ),
       GoRoute(
         path: Routes.account,
