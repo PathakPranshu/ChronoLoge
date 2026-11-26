@@ -38,13 +38,16 @@ class SettingsScreen extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: colorTheme.surface,
                   gradient: RadialGradient(
-                    center: const Alignment(0.05, 0.05),
+                    center: const Alignment(0.06, 0.05),
                     colors: [
-                      colorTheme.primaryFixed.withValues(alpha: 0.2),
-                      colorTheme.surface,
+                      Color.alphaBlend(
+                      colorTheme.surface.withValues(alpha: 0.2),
+                      colorTheme.primaryFixed.withValues(alpha: 0.5),
+                      ),
+                      colorTheme.surface.withAlpha(80),
                     ],
-                    radius: 0.5,
-                    stops: const [0.0, 0.524],
+                    radius: 0.275,
+                    stops: const [0.0,1],
                     transform: const GradientRotationMatrix(),
                   ),
                 ),

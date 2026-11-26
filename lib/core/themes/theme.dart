@@ -118,7 +118,7 @@ class CustomTheme {
     return TextTheme(
       displayMedium: const TextStyle(
         fontFamily: 'Fraunces',
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight(460),
         fontVariations: [
           FontVariation.opticalSize(80),
           FontVariation('SOFT', 24),
@@ -127,7 +127,7 @@ class CustomTheme {
       ),
       displaySmall: const TextStyle(
         fontFamily: 'Fraunces',
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight(460),
         fontVariations: [
           FontVariation.opticalSize(76),
           FontVariation('SOFT', 30),
@@ -149,3 +149,4 @@ class CustomTheme {
     );
   }
 }
+

@@ -73,11 +73,14 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                 gradient: RadialGradient(
                   center: const Alignment(-0.05, 0.05),
                   colors: [
-                    colorTheme.secondaryFixed.withAlpha(100),
-                    colorTheme.surface.withAlpha(20),
+                    Color.alphaBlend(
+                      colorTheme.surface.withValues(alpha: 0.25),
+                      colorTheme.secondaryFixed.withValues(alpha: 0.5),
+                    ),
+                    colorTheme.surface.withAlpha(40),
                   ],
-                  radius: 0.5,
-                  stops: const [0.009, 0.524],
+                  radius: 0.275,
+                  stops: const [0, 1],
                   transform: const GradientRotationMatrix(),
                 ),
               ),

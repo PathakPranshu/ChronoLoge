@@ -34,11 +34,14 @@ class PinSetupScreen extends ConsumerWidget {
                 gradient: RadialGradient(
                   center: const Alignment(0.0, 0.05),
                   colors: [
+                    Color.alphaBlend(
+                    colorTheme.surface.withAlpha(50),
                     colorTheme.secondaryFixedDim.withAlpha(100),
+                    ),
                     colorTheme.surface.withAlpha(50),
                   ],
-                  radius: 0.5,
-                  stops: const [0.0, 0.524],
+                  radius: 0.35,
+                  stops: const [0.0, 1],
                   transform: const GradientRotationMatrix(),
                 ),
               ),
